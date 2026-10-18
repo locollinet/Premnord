@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Suivi App Premnord</title>
+    <meta name="description" content="Système professionnel d'inventaire, de traçabilité et de suivi de cave à vin de haute précision pour Premnord." />
+    <meta property="og:title" content="Suivi App Premnord" />
+    <meta property="og:description" content="Système professionnel d'inventaire, de traçabilité et de suivi de cave à vin de haute précision pour Premnord." />
+    <script>
+      // Ignore Vite HMR WebSocket connection errors in sandboxed iframe environment
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event.reason && (String(event.reason).includes('WebSocket') || String(event.reason?.stack || '').includes('@vite/client'))) {
+          event.preventDefault();
+        }
+      });
+      window.addEventListener('error', function(event) {
+        if (event.filename && event.filename.includes('@vite/client')) {
+          event.preventDefault();
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

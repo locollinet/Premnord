@@ -1,0 +1,6 @@
+{
+  "name": "Suivi App Premnord",
+  "description": "Système professionnel d'inventaire, de traçabilité et de suivi de cave à vin de haute précision pour Premnord.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,268 @@
+=================== CONSOLIDATED FIRESTORE CHAMPAGNE AUDIT ===================
+Database ID: ai-studio-suiviapppremnord-d559461f-746f-43a5-9a81-02a0e8c2cb78
+==============================================================================
+
+📍 DEPLOYED SITES:
+  - [site-1]: Site 1 - Vins blancs à la carte
+  - [site-2]: Site 2 - Vins rouges à la carte
+  - [site-3]: Site 3 - Stocks des sites 1 et 2
+  - [site-4]: Site 4 - Nouveaux millésimes / Attente
+  - [site-5]: Site 5 - Déclassements (À liquider)
+  - [site-6]: Site 6 - Cuisine
+
+📂 Total wines in database: 45
+🥂 Total Champagne / Sparklings found: 45
+
+-----------------------------------------------------------------------
+[1] AMAURY BEAUFORT - Champagne - Le Jardinot (N.V.)
+    Color: bulle | Region: Champagne
+    Prices: HT: 38 € | HT+Port: 38 € | TTC: 130 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=8 (Bin 6F4)
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3D)
+      📊 TOTAL QUANTITY: 10
+
+[2] ANDRÉ BEAUFORT - Champagne - Polisy (2004)
+    Color: bulle | Region: Champagne
+    Prices: HT: 26.5 € | HT+Port: 26.5 € | TTC: 200 €
+    Quantities per Site:
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3C)
+      📊 TOTAL QUANTITY: 2
+
+[3] ANDRÉ BEAUFORT - Champagne - Ambonnay. Blanc de blancs (2014)
+    Color: bulle | Region: Champagne
+    Prices: HT: 112.5 € | HT+Port: 112.5 € | TTC: 320 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=6 (Bin 6B1)
+      📊 TOTAL QUANTITY: 6
+
+[4] ANDRÉ BEAUFORT - Champagne Grand Cru - Ambonnay (2003)
+    Color: bulle | Region: Champagne
+    Prices: HT: 36.5 € | HT+Port: 36.5 € | TTC: 327 €
+    Quantities per Site:
+      📍 Site 1 - Vins blancs à la carte: Qty=1 (Bin 3A)
+      📊 TOTAL QUANTITY: 1
+
+[5] AURORE CASANOVA - Champagne Grand Cru - Puisieulx. les petites vignes PN (N.V.)
+    Color: bulle | Region: Champagne
+    Prices: HT: 35 € | HT+Port: 36.61 € | TTC: 117 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=0 (Bin 2F1)
+      📊 TOTAL QUANTITY: 0
+
+[6] AURORE CASANOVA - Champagne Grand Cru - Puisieulx. les petites vignes Chardo (N.V.)
+    Color: bulle | Region: Champagne
+    Prices: HT: 33 € | HT+Port: 34.61 € | TTC: 112 €
+    Quantities per Site:
+      📍 Site 1 - Vins blancs à la carte: Qty=1 (Bin 3D)
+      📊 TOTAL QUANTITY: 1
+
+[7] BROCHET - Champagne - Eole (2019)
+    Color: bulle | Region: Champagne
+    Prices: HT: 49 € | HT+Port: 49 € | TTC: 150 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=0 (Bin 6D4)
+      📊 TOTAL QUANTITY: 0
+
+[8] BROCHET - Champagne - Premices (N.V.)
+    Color: bulle | Region: Champagne
+    Prices: HT: 29 € | HT+Port: 29 € | TTC: 96 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=3 (Bin 6D4)
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3C)
+      📊 TOTAL QUANTITY: 5
+
+[9] DRAPPIER - Champagne - Grande Sendrée (2012)
+    Color: bulle | Region: Champagne
+    Prices: HT: 51 € | HT+Port: 51 € | TTC: 155 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=0 (Bin 6F4)
+      📊 TOTAL QUANTITY: 0
+
+[10] JACQUES PICARD - Champagne - Art de Vignes (2009)
+    Color: bulle | Region: Champagne
+    Prices: HT: 31.1 € | HT+Port: 31.1 € | TTC: 100 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=4 (Bin 6D1)
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3E)
+      📊 TOTAL QUANTITY: 6
+
+[11] JACQUES PICARD - Champagne - Les Bénis (2019)
+    Color: bulle | Region: Champagne
+    Prices: HT: 41 € | HT+Port: 41 € | TTC: 129 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=2 (Bin 6C1)
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3E)
+      📊 TOTAL QUANTITY: 4
+
+[12] JACQUES PICARD - Champagne - Double Solera (N.V.)
+    Color: bulle | Region: Champagne
+    Prices: HT: 25.6 € | HT+Port: 25.6 € | TTC: 85 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=6 (Bin 6B4)
+      📍 Site 1 - Vins blancs à la carte: Qty=1 (Bin 3E)
+      📊 TOTAL QUANTITY: 7
+
+[13] JACQUES PICARD - Coteaux Champenois - Son Palais (2020)
+    Color: blanc | Region: Champagne
+    Prices: HT: 27.4 € | HT+Port: 27.4 € | TTC: 90 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=4 (Bin 2B1)
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 1J1)
+      📊 TOTAL QUANTITY: 6
+
+[14] JACQUES PICARD - Coteaux Champenois - Le Revers de l'Ail Noe (2022)
+    Color: rouge | Region: Champagne
+    Prices: HT: 27.4 € | HT+Port: 27.4 € | TTC: 90 €
+    Quantities per Site:
+      📍 Site 3 - Stocks des sites 1 et 2: Qty=6 (Bin 1C1)
+      📊 TOTAL QUANTITY: 6
+
+[15] JACQUES SELOSSE - Champagne Grand Cru - Ambonnay. Le bout du Clos (base 2015)
+    Color: bulle | Region: Champagne
+    Prices: HT: 145 € | HT+Port: 145.97 € | TTC: 440 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=2 (Bin 6G0)
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3F)
+      📊 TOTAL QUANTITY: 4
+
+[16] JACQUES SELOSSE - Champagne Grand Cru - Substance (N.V.)
+    Color: bulle | Region: Champagne
+    Prices: HT: 178 € | HT+Port: 178.97 € | TTC: 530 €
+    Quantities per Site:
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3F)
+      📊 TOTAL QUANTITY: 2
+
+[17] JACQUES SELOSSE - Champagne Grand Cru - Substance (N.V.)
+    Color: bulle | Region: Champagne
+    Prices: HT: 178 € | HT+Port: 178.97 € | TTC: 530 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=4 (Bin 6G0)
+      📊 TOTAL QUANTITY: 4
+
+[18] JACQUES SELOSSE - Champagne Grand Cru - Largillier (N.V.)
+    Color: bulle | Region: Champagne
+    Prices: HT: 80 € | HT+Port: 80 € | TTC: 380 €
+    Quantities per Site:
+      📍 Site 3 - Stocks des sites 1 et 2: Qty=6 (Bin 15B4)
+      📊 TOTAL QUANTITY: 6
+
+[19] JACQUESSON - Champagne - Cuvee n°746 (2013)
+    Color: bulle | Region: Champagne
+    Prices: HT: 35 € | HT+Port: 35 € | TTC: 115 €
+    Quantities per Site:
+      📍 Site 1 - Vins blancs à la carte: Qty=1 (Bin 3G)
+      📊 TOTAL QUANTITY: 1
+
+[20] JACQUESSON - Champagne Grand Cru - Avize Champ Cain (2013)
+    Color: bulle | Region: Champagne
+    Prices: HT: 100 € | HT+Port: 100 € | TTC: 285 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=2 (Bin 6F4)
+      📊 TOTAL QUANTITY: 2
+
+[21] LA ROGERIE - Champagne Grand Cru - Bourg/Sud (18-22)
+    Color: bulle | Region: Champagne
+    Prices: HT: 40 € | HT+Port: 40 € | TTC: 124 €
+    Quantities per Site:
+      📍 Site 3 - Stocks des sites 1 et 2: Qty=6
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=1 (Bin 6E4)
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3H)
+      📊 TOTAL QUANTITY: 9
+
+[22] LA ROGERIE - Champagne Grand Cru - Champ Bouton (2020)
+    Color: bulle | Region: Champagne
+    Prices: HT: 65 € | HT+Port: 65 € | TTC: 195 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=1 (Bin 6D4)
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3H)
+      📊 TOTAL QUANTITY: 3
+
+[23] LOUISE BRISON - Champagne - A l'Aube (2012)
+    Color: bulle | Region: Champagne
+    Prices: HT: 46 € | HT+Port: 47.38 € | TTC: 150 €
+    Quantities per Site:
+      📍 Site 3 - Stocks des sites 1 et 2: Qty=0
+      📊 TOTAL QUANTITY: 0
+
+[24] LOUISE BRISON - Champagne - Chardonnay (2016)
+    Color: bulle | Region: Champagne
+    Prices: HT: 25 € | HT+Port: 26.38 € | TTC: 87 €
+    Quantities per Site:
+      📍 Site 1 - Vins blancs à la carte: Qty=0 (Bin 3A)
+      📊 TOTAL QUANTITY: 0
+
+[25] LOUISE BRISON - Champagne - Rose de la Cote des Bar (2017)
+    Color: bulle | Region: Champagne
+    Prices: HT: 21.7 € | HT+Port: 23.08 € | TTC: 77 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=3 (Bin 8AA0)
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3F)
+      📊 TOTAL QUANTITY: 5
+
+[26] PASCAL AGRAPART - Champagne Grand Cru - Venus (2017)
+    Color: bulle | Region: Champagne
+    Prices: HT: 112.5 € | HT+Port: 112.5 € | TTC: 320 €
+    Quantities per Site:
+      📍 Site 1 - Vins blancs à la carte: Qty=1 (Bin 3D)
+      📊 TOTAL QUANTITY: 1
+
+[27] RENÉ GEOFFROY - Champagne 1er Cru - EB Terre (2006)
+    Color: bulle | Region: Champagne
+    Prices: HT: 180 € | HT+Port: 180.98 € | TTC: 480 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=2 (Bin 6F1)
+      📊 TOTAL QUANTITY: 2
+
+[28] RENÉ GEOFFROY - Champagne 1er Cru - EB Terre (2012)
+    Color: bulle | Region: Champagne
+    Prices: HT: 62 € | HT+Port: 62.98 € | TTC: 189 €
+    Quantities per Site:
+      📍 Site 1 - Vins blancs à la carte: Qty=2 (Bin 3A)
+      📊 TOTAL QUANTITY: 2
+
+[29] RENÉ GEOFFROY - Champagne 1er Cru - EB Volupté (2015)
+    Color: bulle | Region: Champagne
+    Prices: HT: 34 € | HT+Port: 34.98 € | TTC: 112 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=0 (Bin 6D4)
+      📊 TOTAL QUANTITY: 0
+
+[30] RENÉ GEOFFROY - Champagne 1er Cru - Brut rosé de Saignée (N.V.)
+    Color: bulle | Region: Champagne
+    Prices: HT: 28 € | HT+Port: 28.98 € | TTC: 95 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=2 (Bin 6D4)
+      📊 TOTAL QUANTITY: 2
+
+[31] ROSES DE JEANNE - Champagne - les Ursules (2019)
+    Color: bulle | Region: Champagne
+    Prices: HT: 59 € | HT+Port: 61.51 € | TTC: 185 €
+    Quantities per Site:
+      📍 Site 1 - Vins blancs à la carte: Qty=0 (Bin 3F)
+      📊 TOTAL QUANTITY: 0
+
+[32] ROSES DE JEANNE - Champagne - les Ursules (2019)
+    Color: bulle | Region: Champagne
+    Prices: HT: 127 € | HT+Port: 129.51 € | TTC: 370 €
+    Quantities per Site:
+      📍 Site 3 - Stocks des sites 1 et 2: Qty=0
+      📊 TOTAL QUANTITY: 0
+
+[33] ROSES DE JEANNE - Champagne - Val Vilaine (2021)
+    Color: bulle | Region: Champagne
+    Prices: HT: 33 € | HT+Port: 35.51 € | TTC: 115 €
+    Quantities per Site:
+      📍 Site 4 - Nouveaux millésimes / Attente: Qty=4 (Bin 6D1)
+      📊 TOTAL QUANTITY: 4
+
+[34] ROSES DE JEANNE - Champagne - RDJ 2 (N.V.)
+    Color: bulle | Region: Champagne
+    Prices: HT: 134 € | HT+Port: 136.51 € | TTC: 375 €
+    Quantities per Site:
+      📍 Site 1 - Vins blancs à la carte: Qty=1
+      📊 TOTAL QUANTITY: 1
+
+=======================================================================
+📈 GRAND TOTAL CHAMPAGNE QUANTITY: 102
+=======================================================================

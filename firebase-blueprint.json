@@ -1,0 +1,88 @@
+{
+  "entities": {
+    "site": {
+      "title": "Site",
+      "description": "A physical storage location for wine, e.g., main cellar or service cellar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the site" },
+        "name": { "type": "string", "description": "Name of the storage site" },
+        "description": { "type": "string", "description": "Description or notes about the storage site" },
+        "createdAt": { "type": "number", "description": "Timestamp when the site was created" }
+      },
+      "required": ["id", "name", "createdAt"]
+    },
+    "wine": {
+      "title": "Wine",
+      "description": "Details of a wine bottle in inventory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the wine" },
+        "name": { "type": "string", "description": "Name of the wine" },
+        "domain": { "type": "string", "description": "Domain or producer of the wine" },
+        "vintage": { "type": "string", "description": "Vintage year or NV" },
+        "color": { "type": "string", "enum": ["rouge", "blanc", "rose", "bulle", "orange", "spiritueux", "cidre_biere", "soft", "autre"], "description": "Type of wine (red, white, etc.)" },
+        "region": { "type": "string", "description": "Wine region" },
+        "quantity": { "type": "number", "description": "Current inventory stock level" },
+        "alertThreshold": { "type": "number", "description": "Alert threshold for low stock" },
+        "siteId": { "type": "string", "description": "Site ID of current storage" },
+        "bin": { "type": "string", "description": "Bin number or specific shelf location" },
+        "priceBuy": { "type": "number", "description": "Purchase price per bottle" },
+        "priceSell": { "type": "number", "description": "Selling price per bottle" },
+        "notes": { "type": "string", "description": "Additional notes/comments" },
+        "createdAt": { "type": "number", "description": "Timestamp of creation" },
+        "updatedAt": { "type": "number", "description": "Timestamp of last edit" }
+      },
+      "required": ["id", "name", "domain", "vintage", "color", "quantity", "alertThreshold", "siteId", "createdAt", "updatedAt"]
+    },
+    "movement": {
+      "title": "Movement",
+      "description": "An entry, exit, transfer, or stock correction transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier" },
+        "wineId": { "type": "string", "description": "Referenced Wine ID" },
+        "wineName": { "type": "string", "description": "Name snapshot of the wine" },
+        "type": { "type": "string", "enum": ["in", "out", "transfer", "correction"], "description": "Type of stock flow" },
+        "quantity": { "type": "number", "description": "Quantity moved" },
+        "fromSiteId": { "type": "string", "description": "Origin site ID (for transfers/exits)" },
+        "toSiteId": { "type": "string", "description": "Destination site ID (for transfers/entries)" },
+        "reason": { "type": "string", "enum": ["livraison", "vente", "casse", "correction", "transfert", "autre"], "description": "Reason for the transaction" },
+        "notes": { "type": "string", "description": "Optional comments" },
+        "userId": { "type": "string", "description": "User ID who logged the movement" },
+        "userName": { "type": "string", "description": "User name who logged the movement" },
+        "createdAt": { "type": "number", "description": "Timestamp of action" }
+      },
+      "required": ["id", "wineId", "wineName", "type", "quantity", "reason", "userId", "userName", "createdAt"]
+    },
+    "regionSettings": {
+      "title": "RegionSettings",
+      "description": "Master data repository for wine regions, macro-groups, and sub-region suggestions",
+      "type": "object",
+      "properties": {
+        "regions": { "type": "array", "description": "List of configured wine regions with groups, countries, and sub-regions" },
+        "groups": { "type": "array", "description": "List of macro-groups for classifying regions" },
+        "updatedAt": { "type": "number", "description": "Timestamp of last modification" }
+      }
+    }
+  },
+  "firestore": {
+    "sites/{siteId}": {
+      "schema": "site",
+      "description": "Physical wine cellar locations"
+    },
+    "wines/{wineId}": {
+      "schema": "wine",
+      "description": "Individual wines and current stock levels"
+    },
+    "movements/{movementId}": {
+      "schema": "movement",
+      "description": "Log of stock additions, removals, and transfers"
+    },
+    "settings/{settingId}": {
+      "schema": "regionSettings",
+      "description": "Application settings including branding and wine regions master repository"
+    }
+  }
+}
+

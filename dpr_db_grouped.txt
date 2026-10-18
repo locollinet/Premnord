@@ -1,0 +1,116 @@
+Total DPR wines in DB: 226
+Total quantity: 1538
+
+--- GROUPED BY WINE + VINTAGE + FORMAT ---
+Bourgogne Pinoterie | 2022 | Bt | Total Qty: 0 | Sites breakdown: {"site-6":0}
+Bourgogne Pinoterie Pure | 2017 | Bt | Total Qty: 12 | Sites breakdown: {"site-2":2,"site-3":9,"site-6":1}
+Bourgogne Rosé | 2013 | Bt | Total Qty: 2 | Sites breakdown: {"site-1":2}
+Bourgogne Rosé | 2017 | Bt | Total Qty: 0 | Sites breakdown: {"site-6":0}
+Bourgogne Rosé | 2018 | Bt | Total Qty: 0 | Sites breakdown: {"site-6":0}
+Bourgogne Rosé | 2023 | Bt | Total Qty: 12 | Sites breakdown: {"site-1":3,"site-6":9}
+Bourgogne Rosé - 10A2 (Mag) | 2017 | Bt | Total Qty: 18 | Sites breakdown: {"site-1":1,"site-3":13,"site-6":4}
+Chambertin Clos de Bèze | 1998 | Bt | Total Qty: 0 | Sites breakdown: {"site-2":0}
+Chambertin Clos de Bèze | 2001 | Bt | Total Qty: 15 | Sites breakdown: {"site-2":6,"site-3":8,"site-6":1}
+Chambertin Clos de Bèze | 2002 | Bt | Total Qty: 0 | Sites breakdown: {"site-6":0}
+Chambertin Clos de Bèze | 2006 | Bt | Total Qty: 1 | Sites breakdown: {"site-6":1}
+Chambertin Clos de Bèze | 2007 | Bt | Total Qty: 11 | Sites breakdown: {"site-2":6,"site-3":5}
+Chambertin Clos de Bèze | 2013 | Bt | Total Qty: 2 | Sites breakdown: {"site-2":2}
+Chambertin Clos de Bèze | 2015 | Bt | Total Qty: 7 | Sites breakdown: {"site-2":2,"site-6":5}
+Chambertin Clos de Bèze - 14A3 (Mag) | 1998 | Bt | Total Qty: 2 | Sites breakdown: {"site-3":1,"site-6":1}
+Champagne - Eole | 2019 | Bt | Total Qty: 0 | Sites breakdown: {"site-4":0}
+Champagne - Premices | N.V. | Bt | Total Qty: 5 | Sites breakdown: {"site-1":2,"site-4":3}
+Clos de Vougeot | 2001 | Bt | Total Qty: 4 | Sites breakdown: {"site-3":2,"site-6":2}
+Clos de Vougeot | 2009 | Bt | Total Qty: 8 | Sites breakdown: {"site-2":6,"site-3":2}
+Clos de Vougeot | 2012 | Bt | Total Qty: 11 | Sites breakdown: {"site-2":6,"site-3":3,"site-6":2}
+Clos de Vougeot | 2013 | Bt | Total Qty: 3 | Sites breakdown: {"site-3":2,"site-6":1}
+Clos de Vougeot | 2015 | Bt | Total Qty: 0 | Sites breakdown: {"site-6":0}
+Clos de Vougeot | 2016 | Bt | Total Qty: 18 | Sites breakdown: {"site-2":6,"site-3":11,"site-6":1}
+Clos de Vougeot | 2018 | Bt | Total Qty: 0 | Sites breakdown: {"site-2":0}
+Clos de Vougeot - 10B2 (Mag) | 2001 | Bt | Total Qty: 4 | Sites breakdown: {"site-3":3,"site-6":1}
+Clos de Vougeot - 10C2 (Mag) | 1994 | Bt | Total Qty: 3 | Sites breakdown: {"site-3":2,"site-6":1}
+Côteaux Bourguignons | 2018 | Bt | Total Qty: 9 | Sites breakdown: {"site-2":1,"site-3":6,"site-6":2}
+Côteaux Bourguignons | 2019 | Bt | Total Qty: 26 | Sites breakdown: {"site-3":24,"site-6":2}
+Côteaux Bourguignons | 2020 | Bt | Total Qty: 24 | Sites breakdown: {"site-2":3,"site-3":12,"site-6":9}
+Côteaux Bourguignons | 2021 | Bt | Total Qty: 18 | Sites breakdown: {"site-3":18}
+Côteaux Bourguignons | 2022 | Bt | Total Qty: 24 | Sites breakdown: {"site-3":24}
+Côteaux Bourguignons (Mag) | 2021 | Bt | Total Qty: 0 | Sites breakdown: {"site-6":0}
+Coteaux du Loir - La Belle d'Aunis | 2018 | Bt | Total Qty: 7 | Sites breakdown: {"site-2":2,"site-4":5}
+Coteaux du Loir - La Belle d'Aunis (Mag) | 2017 | Bt | Total Qty: 1 | Sites breakdown: {"site-4":1}
+Gevrey-Chambertin 1er Cru Clos des Varoilles Vieilles Vignes | 2021 | Bt | Total Qty: 21 | Sites breakdown: {"site-2":1,"site-3":18,"site-6":2}
+Gevrey-Chambertin Vieilles Vignes | 2020 | Bt | Total Qty: 29 | Sites breakdown: {"site-2":3,"site-3":24,"site-6":2}
+Ladoix le Cloud | 2019 | Bt | Total Qty: 6 | Sites breakdown: {"site-1":2,"site-2":4}
+Ladoix le Cloud | 2020 | Bt | Total Qty: 82 | Sites breakdown: {"site-1":2,"site-2":2,"site-3":70,"site-6":8}
+Ladoix le Cloud | 2021 | Bt | Total Qty: 43 | Sites breakdown: {"site-3":36,"site-6":7}
+Ladoix le Cloud | 2022 | Bt | Total Qty: 0 | Sites breakdown: {"site-1":0}
+Ladoix le Cloud | 2023 | Bt | Total Qty: 0 | Sites breakdown: {"site-6":0}
+Ladoix le Cloud - 10B3 (Mag) | 2014 | Bt | Total Qty: 14 | Sites breakdown: {"site-2":1,"site-3":12,"site-6":1}
+Ladoix le Cloud - 10C1 (Mag) | 2013 | Bt | Total Qty: 10 | Sites breakdown: {"site-1":1,"site-3":8,"site-6":1}
+Ladoix le Cloud - 12A3 (Mag) | 2017 | Bt | Total Qty: 12 | Sites breakdown: {"site-2":1,"site-3":10,"site-6":1}
+Ladoix le Cloud - 12B3 (Mag) | 2019 | Bt | Total Qty: 11 | Sites breakdown: {"site-2":1,"site-3":10}
+Ladoix le Cloud - 12B3 (Mag) | 2020 | Bt | Total Qty: 5 | Sites breakdown: {"site-2":2,"site-3":3}
+Ladoix le Cloud - 12C1 (Mag) | 2021 | Bt | Total Qty: 24 | Sites breakdown: {"site-3":23,"site-6":1}
+Ladoix le Cloud - 14B3 (Mag) | 2021 | Bt | Total Qty: 5 | Sites breakdown: {"site-1":1,"site-3":4}
+Ladoix le Cloud - 14C3 (Mag) | 2022 | Bt | Total Qty: 15 | Sites breakdown: {"site-3":15}
+Ladoix le Cloud (Mag) | 2020 | Bt | Total Qty: 3 | Sites breakdown: {"site-1":1,"site-6":2}
+Nuits-Saint-Georges 1er Cru | 2015 | Bt | Total Qty: 0 | Sites breakdown: {"site-6":0}
+Nuits-Saint-Georges 1er Cru | 2018 | Bt | Total Qty: 11 | Sites breakdown: {"site-2":2,"site-6":9}
+Nuits-Saint-Georges 1er Cru | 2019 | Bt | Total Qty: 32 | Sites breakdown: {"site-2":3,"site-3":24,"site-6":5}
+Nuits-Saint-Georges 1er Cru - 12B2 (Mag) | 2019 | Bt | Total Qty: 6 | Sites breakdown: {"site-2":2,"site-3":4}
+Nuits-Saint-Georges 1er Cru - Le Clos des Corvées Monopole | 2018 | Bt | Total Qty: 6 | Sites breakdown: {"site-6":6}
+Nuits-Saint-Georges 1er Cru (Mag) | 2014 | Bt | Total Qty: 0 | Sites breakdown: {"site-2":0}
+Nuits-Saint-Georges 1er Cru Clos des Argillières | 2011 | Bt | Total Qty: 17 | Sites breakdown: {"site-2":6,"site-3":6,"site-6":5}
+Nuits-Saint-Georges 1er Cru Clos des Argillières | 2012 | Bt | Total Qty: 16 | Sites breakdown: {"site-2":6,"site-3":6,"site-6":4}
+Nuits-Saint-Georges 1er Cru Clos des Argillières | 2014 | Bt | Total Qty: 11 | Sites breakdown: {"site-2":3,"site-6":8}
+Nuits-Saint-Georges 1er Cru Clos des Argillières | 2017 | Bt | Total Qty: 14 | Sites breakdown: {"site-2":6,"site-3":6,"site-6":2}
+Nuits-Saint-Georges 1er Cru Clos des Argillières - 10A3 (Mag) | 2012 | Bt | Total Qty: 6 | Sites breakdown: {"site-3":5,"site-6":1}
+Nuits-Saint-Georges 1er Cru Clos des Argillières - 14A3 (Mag) | 2010 | Bt | Total Qty: 3 | Sites breakdown: {"site-3":3}
+Nuits-Saint-Georges 1er Cru Clos des Argillières - Pure - 14A2 (Mag) | 2016 | Bt | Total Qty: 1 | Sites breakdown: {"site-6":1}
+Nuits-Saint-Georges 1er Cru Clos des Corvées - Monopole | 2003 | Bt | Total Qty: 12 | Sites breakdown: {"site-2":4,"site-3":6,"site-6":2}
+Nuits-Saint-Georges 1er Cru Clos des Corvées - Monopole | 2007 | Bt | Total Qty: 21 | Sites breakdown: {"site-2":4,"site-3":15,"site-6":2}
+Nuits-Saint-Georges 1er Cru Clos des Corvées - Monopole | 2009 | Bt | Total Qty: 14 | Sites breakdown: {"site-2":6,"site-3":8}
+Nuits-Saint-Georges 1er Cru Clos des Corvées - Monopole | 2013 | Bt | Total Qty: 23 | Sites breakdown: {"site-2":6,"site-3":15,"site-6":2}
+Nuits-Saint-Georges 1er Cru Clos des Corvées - Monopole | 2017 | Bt | Total Qty: 11 | Sites breakdown: {"site-2":5,"site-6":6}
+Nuits-Saint-Georges 1er Cru Clos des Corvées - Monopole | 2018 | Bt | Total Qty: 0 | Sites breakdown: {"site-3":0}
+Nuits-Saint-Georges 1er Cru Clos des Corvées - Monopole - 10B3/14A2 (Mag) | 2012 | Bt | Total Qty: 6 | Sites breakdown: {"site-3":5,"site-6":1}
+Nuits-Saint-Georges 1er Cru Clos des Corvées - Monopole Vieilles Vignes | 2021 | Bt | Total Qty: 35 | Sites breakdown: {"site-3":30,"site-6":5}
+Nuits-Saint-Georges 1er Cru Vieilles Vignes | 2005 | Bt | Total Qty: 13 | Sites breakdown: {"site-2":6,"site-3":6,"site-6":1}
+Nuits-Saint-Georges 1er Cru Vieilles Vignes | 2009 | Bt | Total Qty: 2 | Sites breakdown: {"site-2":2}
+Nuits-Saint-Georges 1er Cru Vieilles Vignes | 2014 | Bt | Total Qty: 30 | Sites breakdown: {"site-2":4,"site-3":24,"site-6":2}
+Nuits-Saint-Georges 1er Cru Vieilles Vignes | 2018 | Bt | Total Qty: 12 | Sites breakdown: {"site-2":6,"site-6":6}
+Nuits-Saint-Georges 1er Cru Vieilles Vignes - 10A3 (Mag) | 2015 | Bt | Total Qty: 12 | Sites breakdown: {"site-3":10,"site-6":2}
+Savigny-lès-Beaune Dessus les Gollardes | 2018 | Bt | Total Qty: 8 | Sites breakdown: {"site-2":6,"site-6":2}
+Savigny-lès-Beaune Dessus les Gollardes | 2020 | Bt | Total Qty: 21 | Sites breakdown: {"site-2":6,"site-3":12,"site-6":3}
+Savigny-lès-Beaune Dessus les Gollardes | 2021 | Bt | Total Qty: 56 | Sites breakdown: {"site-1":4,"site-3":47,"site-6":5}
+Savigny-lès-Beaune Dessus les Gollardes | 2023 | Bt | Total Qty: 28 | Sites breakdown: {"site-1":1,"site-3":24,"site-6":3}
+Savigny-lès-Beaune Dessus les Gollardes - 10C2 (Mag) | 2018 | Bt | Total Qty: 16 | Sites breakdown: {"site-2":1,"site-3":15}
+Vin de France | 2022 | Bt | Total Qty: 62 | Sites breakdown: {"site-2":2,"site-3":60}
+Vin de France | 2023 | Bt | Total Qty: 47 | Sites breakdown: {"site-1":1,"site-3":36,"site-6":10}
+Vin de France - 12B2 (Mag) | 2023 | Bt | Total Qty: 12 | Sites breakdown: {"site-3":12}
+Vin de France - Macération | 2014 | Bt | Total Qty: 58 | Sites breakdown: {"site-1":3,"site-3":48,"site-6":7}
+Vin de France - Macération | 2015 | Bt | Total Qty: 47 | Sites breakdown: {"site-1":3,"site-3":36,"site-6":8}
+Vin de France - Macération | 2019 | Bt | Total Qty: 120 | Sites breakdown: {"site-1":4,"site-3":108,"site-6":8}
+Vin de France - Macération | 2020 | Bt | Total Qty: 3 | Sites breakdown: {"site-1":3}
+Vin de France - Macération - 10C3 (Mag) | 2017 | Bt | Total Qty: 17 | Sites breakdown: {"site-1":1,"site-3":15,"site-6":1}
+Vosne-Romanée - Les Clous (Mag) | 2012 | Bt | Total Qty: 1 | Sites breakdown: {"site-6":1}
+Vosne-Romanée 1er Cru Les Suchots | 2006 | Bt | Total Qty: 0 | Sites breakdown: {"site-2":0}
+Vosne-Romanée 1er Cru Les Suchots | 2007 | Bt | Total Qty: 1 | Sites breakdown: {"site-6":1}
+Vosne-Romanée 1er Cru Les Suchots | 2009 | Bt | Total Qty: 7 | Sites breakdown: {"site-2":4,"site-6":3}
+Vosne-Romanée 1er Cru Les Suchots | 2014 | Bt | Total Qty: 3 | Sites breakdown: {"site-2":1,"site-6":2}
+Vosne-Romanée 1er Cru Les Suchots | 2015 | Bt | Total Qty: 0 | Sites breakdown: {"site-2":0}
+Vosne-Romanée 1er Cru Les Suchots | 2016 | Bt | Total Qty: 2 | Sites breakdown: {"site-2":2}
+Vosne-Romanée 1er Cru Les Suchots - 10A1 (Mag) | 2014 | Bt | Total Qty: 3 | Sites breakdown: {"site-2":1,"site-3":2}
+Vosne-Romanée Clos Goillote - Monopole | 2009 | Bt | Total Qty: 11 | Sites breakdown: {"site-2":6,"site-6":5}
+Vosne-Romanée Clos Goillote - Monopole | 2014 | Bt | Total Qty: 15 | Sites breakdown: {"site-2":6,"site-3":9}
+Vosne-Romanée Clos Goillote - Monopole | 2017 | Bt | Total Qty: 15 | Sites breakdown: {"site-2":6,"site-6":9}
+Vosne-Romanée Clos Goillote - Monopole - 10A1/10B1 (Mag) | 2014 | Bt | Total Qty: 4 | Sites breakdown: {"site-2":1,"site-3":3}
+Vosne-Romanée Hautes Maizières | 1994 | Bt | Total Qty: 7 | Sites breakdown: {"site-2":4,"site-6":3}
+Vosne-Romanée Hautes Maizières | 2006 | Bt | Total Qty: 14 | Sites breakdown: {"site-2":6,"site-3":6,"site-6":2}
+Vosne-Romanée Hautes Maizières | 2012 | Bt | Total Qty: 19 | Sites breakdown: {"site-2":6,"site-3":12,"site-6":1}
+Vosne-Romanée Hautes Maizières | 2017 | Bt | Total Qty: 3 | Sites breakdown: {"site-2":3}
+Vosne-Romanée Hautes Maizières - 10A1/14A1 (Mag) | 2014 | Bt | Total Qty: 4 | Sites breakdown: {"site-3":3,"site-6":1}
+Vosne-Romanée Hautes Maizières - Pure (Mag) | 2016 | Bt | Total Qty: 1 | Sites breakdown: {"site-2":1}
+Vosne-Romanée Les Clous | 2009 | Bt | Total Qty: 25 | Sites breakdown: {"site-2":6,"site-3":18,"site-6":1}
+Vosne-Romanée Les Clous | 2012 | Bt | Total Qty: 26 | Sites breakdown: {"site-2":6,"site-3":18,"site-6":2}
+Vosne-Romanée Les Clous | 2016 | Bt | Total Qty: 20 | Sites breakdown: {"site-2":6,"site-3":12,"site-6":2}
+Vosne-Romanée Les Clous - 10B1 (Mag) | 2012 | Bt | Total Qty: 11 | Sites breakdown: {"site-3":6,"site-6":5}
+Vougeot 1er Cru - 10A1/14A1 (Mag) | 2011 | Bt | Total Qty: 10 | Sites breakdown: {"site-3":9,"site-6":1}

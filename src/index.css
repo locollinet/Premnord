@@ -1,0 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Premium Premnord brand palette */
+  --color-premnord-green: #6E776E;
+  --color-premnord-green-dark: #585F58;
+  --color-premnord-green-light: #F0F2F0;
+  --color-premnord-gold: #C4A47A;
+  --color-premnord-gold-dark: #B09066;
+  --color-premnord-gold-light: #F7F3EB;
+  --color-premnord-dark: #1E221E;
+  --color-premnord-cream: #FAF8F5;
+  --color-premnord-burgundy: #6B2128;
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .animate-slide-up {
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .pb-safe {
+    padding-bottom: max(1.25rem, calc(0.75rem + env(safe-area-inset-bottom)));
+  }
+}
+
+html, body {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+button, input, select, textarea, [role="button"], a, .clickable {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Custom scrollbar hiding helper */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media print {
+  body {
+    background-color: white !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #printable-wine-menu, #printable-wine-menu *,
+  #print-sheet-card, #print-sheet-card * {
+    visibility: visible;
+  }
+  #printable-wine-menu, #print-sheet-card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+  }
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+}
+
+

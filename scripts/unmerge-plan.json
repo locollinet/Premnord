@@ -1,0 +1,432 @@
+[
+  {
+    "originalId": "wine_1785837689516_g24f4",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Côteaux Bourguignons - Magnum",
+    "cuvee": "Magnum",
+    "vintage": "2018",
+    "color": "rouge",
+    "format": "Magnum",
+    "totalQuantity": 0,
+    "siteId": "site-3",
+    "siteName": "Site 3 : Effervescents à la carte",
+    "bin": "",
+    "priceBuy": 88,
+    "priceSell": 220,
+    "notesParts": [
+      "Importation de stock - Réserve Estanco",
+      "Importation de stock - Réserve Estanco"
+    ],
+    "splitQuantities": [
+      0,
+      0
+    ]
+  },
+  {
+    "originalId": "wine_1785837690184_9recb",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Côteaux Bourguignons - Magnum",
+    "cuvee": "Magnum",
+    "vintage": "2018",
+    "color": "rouge",
+    "format": "Magnum",
+    "totalQuantity": 6,
+    "siteId": "site-6",
+    "siteName": "Site 6 : Vieillissement",
+    "bin": "10C3",
+    "priceBuy": 88,
+    "priceSell": 220,
+    "notesParts": [
+      "Importation de stock - Cuisine",
+      "Importation de stock - Réserve Estanco\n(Ventilation initiale le 16/09/2026)"
+    ],
+    "splitQuantities": [
+      2,
+      4
+    ]
+  },
+  {
+    "originalId": "wine_1785837746913_s4yqv",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru",
+    "vintage": "2018",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 2,
+    "siteId": "site-2",
+    "siteName": "Site 2 : Vins rouges à la carte",
+    "bin": "E4",
+    "priceBuy": 102,
+    "priceSell": 225,
+    "notesParts": [
+      "Importation de stock - Cuisine",
+      "Importation de stock - Restaurant (Rouges)"
+    ],
+    "splitQuantities": [
+      1,
+      1
+    ]
+  },
+  {
+    "originalId": "wine_1785837753048_01vi0",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Argillières",
+    "cuvee": "Clos des Argillières",
+    "vintage": "2017",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 2,
+    "siteId": "site-2",
+    "siteName": "Site 2 : Vins rouges à la carte",
+    "bin": "D6",
+    "priceBuy": 185,
+    "priceSell": 407,
+    "notesParts": [
+      "Importation de stock - Réserve Estanco",
+      "Importation de stock - Restaurant (Rouges)"
+    ],
+    "splitQuantities": [
+      1,
+      1
+    ]
+  },
+  {
+    "originalId": "wine_1785837755086_w7m5p",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Argillières",
+    "cuvee": "Clos des Argillières",
+    "vintage": "2014",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 3,
+    "siteId": "site-2",
+    "siteName": "Site 2 : Vins rouges à la carte",
+    "bin": "E2",
+    "priceBuy": 197,
+    "priceSell": 434,
+    "notesParts": [
+      "Importation de stock - Cuisine",
+      "Importation de stock - Restaurant (Rouges)"
+    ],
+    "splitQuantities": [
+      1,
+      2
+    ]
+  },
+  {
+    "originalId": "wine_1785837759982_nn217",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Corvées - Monopole",
+    "cuvee": "Clos des Corvées - Monopole",
+    "vintage": "2017",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 2,
+    "siteId": "site-2",
+    "siteName": "Site 2 : Vins rouges à la carte",
+    "bin": "F7",
+    "priceBuy": 268,
+    "priceSell": 536,
+    "notesParts": [
+      "Importation de stock - Cuisine",
+      "Importation de stock - Restaurant (Rouges)"
+    ],
+    "splitQuantities": [
+      1,
+      1
+    ]
+  },
+  {
+    "originalId": "wine_1785837761299_p0yig",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Corvées - Monopole",
+    "cuvee": "Clos des Corvées - Monopole",
+    "vintage": "2013",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 2,
+    "siteId": "site-2",
+    "siteName": "Site 2 : Vins rouges à la carte",
+    "bin": "I4",
+    "priceBuy": 289,
+    "priceSell": 578,
+    "notesParts": [
+      "Ce nectar, véritable signature du Domaine Prieuré-Roch, déploie une robe rubis profonde révélant un nez complexe de fruits noirs sauvages, de sous-bois humide et d’épices orientales. En bouche, la structure est d’une verticalité magistrale, où la finesse des tanins s'entrelace avec une tension minérale vibrante, héritage pur de ce terroir bourguignon exceptionnel. Pour sublimer cette élégance, servez-le légèrement au-dessus de 16°C, après une patiente aération en carafe, afin d'exalter sa profondeur éthérée. Ce vin de haute lignée s’accordera idéalement avec un pigeon rôti en croûte de sel ou un ris de veau braisé aux morilles, où la noblesse de la chair répondra à la sève inépuisable de ce cru d'exception.",
+      "Importation de stock - Restaurant (Rouges)"
+    ],
+    "splitQuantities": [
+      1,
+      1
+    ]
+  },
+  {
+    "originalId": "wine_1785837763313_iuklh",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Corvées - Monopole",
+    "cuvee": "Clos des Corvées - Monopole",
+    "vintage": "2009",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 2,
+    "siteId": "site-2",
+    "siteName": "Site 2 : Vins rouges à la carte",
+    "bin": "E7",
+    "priceBuy": 313,
+    "priceSell": 626,
+    "notesParts": [
+      "Importation de stock - Réserve Estanco",
+      "Importation de stock - Restaurant (Rouges)"
+    ],
+    "splitQuantities": [
+      1,
+      1
+    ]
+  },
+  {
+    "originalId": "wine_1785837766691_kufg5",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Corvées - Monopole",
+    "cuvee": "Clos des Corvées - Monopole",
+    "vintage": "2003",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 2,
+    "siteId": "site-2",
+    "siteName": "Site 2 : Vins rouges à la carte",
+    "bin": "E5",
+    "priceBuy": 320,
+    "priceSell": 640,
+    "notesParts": [
+      "Importation de stock - Réserve Estanco",
+      "Importation de stock - Restaurant (Rouges)"
+    ],
+    "splitQuantities": [
+      1,
+      1
+    ]
+  },
+  {
+    "originalId": "wine_1785837775965_g4kk9",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Vieilles Vignes",
+    "cuvee": "Vieilles Vignes",
+    "vintage": "2018",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 2,
+    "siteId": "site-2",
+    "siteName": "Site 2 : Vins rouges à la carte",
+    "bin": "F5",
+    "priceBuy": 115,
+    "priceSell": 253,
+    "notesParts": [
+      "Importation de stock - Cuisine",
+      "Importation de stock - Restaurant (Rouges)"
+    ],
+    "splitQuantities": [
+      1,
+      1
+    ]
+  },
+  {
+    "originalId": "wine_1785837789922_yy8b7",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Savigny-les-Beaune - Dessus les Gollardes",
+    "cuvee": "Dessus les Gollardes",
+    "vintage": "2021",
+    "color": "blanc",
+    "format": "75cl",
+    "totalQuantity": 2,
+    "siteId": "site-1",
+    "siteName": "Site 1 : Vins blancs à la carte",
+    "bin": "M6",
+    "priceBuy": 67,
+    "priceSell": 168,
+    "notesParts": [
+      "Ce Savigny-les-Beaune blanc du Domaine Prieuré-Roch déploie une partition d’une rare pureté, où la tension minérale s’habille d’effluves de fleurs blanches, d’agrumes ciselés et d’une touche subtile de pierre à fusil. En bouche, sa structure épurée et vibrante témoigne d'une vinification infusée, offrant une expression tellurique d’une grande noblesse. Pour sublimer cette pièce d’orfèvrerie, servez-le aux alentours de 12°C, idéalement après une aération délicate en carafe pour laisser s’exprimer sa respiration profonde. Ce vin appelle des accords d’une précision chirurgicale, tels qu’un bar de ligne en croûte de sel ou des ris de veau braisés au citron confit, dont la texture délicate soulignera l’élégance incisive de ce millésime confidentiel.",
+      "Importation de stock - Restaurant (Blancs)"
+    ],
+    "splitQuantities": [
+      1,
+      1
+    ]
+  },
+  {
+    "originalId": "wine_1785839651755_cs9sl",
+    "domain": "La Roche Bleue",
+    "name": "Coteaux du Loir - La Belle d'Aunis",
+    "cuvee": "La Belle d'Aunis",
+    "vintage": "2018",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 2,
+    "siteId": "site-2",
+    "siteName": "Site 2 : Vins rouges à la carte",
+    "bin": "G6",
+    "priceBuy": 11.8,
+    "priceSell": 32,
+    "notesParts": [
+      "Importation de stock - Cave +4",
+      "Importation de stock - Restaurant (Rouges)"
+    ],
+    "splitQuantities": [
+      1,
+      1
+    ]
+  },
+  {
+    "originalId": "wine_1789632349514_evm70",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Corvées - Monopole",
+    "cuvee": "Clos des Corvées - Monopole",
+    "vintage": "2009",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 10,
+    "siteId": "site-4",
+    "siteName": "Site 4 : Cuisine DPR",
+    "priceBuy": 313,
+    "priceSell": 626,
+    "notesParts": [
+      "Importation de stock - Réserve Estanco",
+      "Importation de stock - Restaurant (Rouges)\n(Ventilation initiale le 17/09/2026)"
+    ],
+    "splitQuantities": [
+      5,
+      5
+    ]
+  },
+  {
+    "originalId": "wine_1789632444100_b3wa0",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Corvées - Monopole",
+    "cuvee": "Clos des Corvées - Monopole",
+    "vintage": "2003",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 9,
+    "siteId": "site-4",
+    "siteName": "Site 4 : Cuisine DPR",
+    "priceBuy": 320,
+    "priceSell": 640,
+    "notesParts": [
+      "Importation de stock - Réserve Estanco",
+      "Importation de stock - Restaurant (Rouges)\n(Ventilation initiale le 17/09/2026)"
+    ],
+    "splitQuantities": [
+      4,
+      5
+    ]
+  },
+  {
+    "originalId": "wine_1789632532592_arwum",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru",
+    "vintage": "2018",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 8,
+    "siteId": "site-4",
+    "siteName": "Site 4 : Cuisine DPR",
+    "priceBuy": 102,
+    "priceSell": 225,
+    "notesParts": [
+      "Importation de stock - Cuisine",
+      "Importation de stock - Restaurant (Rouges)\n(Ventilation initiale le 17/09/2026)"
+    ],
+    "splitQuantities": [
+      4,
+      4
+    ]
+  },
+  {
+    "originalId": "wine_1789633073353_v6xvu",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Argillières",
+    "cuvee": "Clos des Argillières",
+    "vintage": "2014",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 10,
+    "siteId": "site-6",
+    "siteName": "Site 6 : Vieillissement",
+    "bin": "14b2",
+    "priceBuy": 197,
+    "priceSell": 434,
+    "notesParts": [
+      "Importation de stock - Cuisine",
+      "Importation de stock - Restaurant (Rouges)\n(Ventilation initiale le 17/09/2026)"
+    ],
+    "splitQuantities": [
+      5,
+      5
+    ]
+  },
+  {
+    "originalId": "wine_1789633121182_70e4r",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Argillières",
+    "cuvee": "Clos des Argillières",
+    "vintage": "2014",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 8,
+    "siteId": "site-4",
+    "siteName": "Site 4 : Cuisine DPR",
+    "priceBuy": 197,
+    "priceSell": 434,
+    "notesParts": [
+      "Importation de stock - Cuisine",
+      "Importation de stock - Restaurant (Rouges)\n(Ventilation initiale le 17/09/2026)\n(Ventilation initiale le 17/09/2026)"
+    ],
+    "splitQuantities": [
+      4,
+      4
+    ]
+  },
+  {
+    "originalId": "wine_1789633143774_gax9k",
+    "domain": "Domaine Prieuré-Roch",
+    "name": "Nuits-Saint-Georges 1er Cru - Clos des Argillières",
+    "cuvee": "Clos des Argillières",
+    "vintage": "2017",
+    "color": "rouge",
+    "format": "75cl",
+    "totalQuantity": 9,
+    "siteId": "site-4",
+    "siteName": "Site 4 : Cuisine DPR",
+    "priceBuy": 185,
+    "priceSell": 407,
+    "notesParts": [
+      "Importation de stock - Réserve Estanco",
+      "Importation de stock - Restaurant (Rouges)\n(Ventilation initiale le 17/09/2026)"
+    ],
+    "splitQuantities": [
+      4,
+      5
+    ]
+  },
+  {
+    "originalId": "wine_1785837999331_0g264",
+    "domain": "Recrue des Sens",
+    "name": "VDF - Manon Magnum",
+    "cuvee": "Manon Magnum",
+    "vintage": "2014",
+    "color": "blanc",
+    "format": "Magnum",
+    "totalQuantity": 1,
+    "siteId": "site-1",
+    "siteName": "Site 1 : Vins blancs à la carte",
+    "bin": "J8",
+    "priceBuy": 131.25,
+    "priceSell": 289,
+    "notesParts": [
+      "Ce millésime 2014 signé Yann Durieux se révèle avec une pureté cristalline, déployant une aromatique complexe de fleurs blanches, d’agrumes confits et de noisette fraîche, transcendée par une tension minérale souveraine. En bouche, la matière s’étire dans une verticalité exemplaire, offrant un équilibre saisissant entre la droiture du terroir bourguignon et une allonge saline d'une grande distinction. Pour exalter son expression, nous préconisons un carafage délicat d’une heure et un service à 12°C, afin de laisser ce nectar livrer toute sa profondeur. Ce grand blanc s’épanouira magistralement aux côtés d’un homard bleu juste saisi au beurre noisette ou de fines lamelles de Saint-Jacques marinées, sublimant la finesse de la chair par sa puissance éthérée.",
+      "Importation de stock - Restaurant (Blancs)"
+    ],
+    "splitQuantities": [
+      0,
+      1
+    ]
+  }
+]
