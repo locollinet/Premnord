@@ -23,7 +23,6 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
-  limit, 
   Firestore,
   getDocs,
   writeBatch,
@@ -456,9 +455,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         loadLocalData();
       });
 
-      // 3. Movements sync (increased limit for accounting extraction and monthly history)
+      // 3. Movements sync (full historical tracking for accounting extraction and monthly history)
       const movementsRef = collection(db, 'movements');
-      unsubscribeMovements = onSnapshot(query(movementsRef, orderBy('createdAt', 'desc'), limit(3000)), (snapshot) => {
+      unsubscribeMovements = onSnapshot(query(movementsRef, orderBy('createdAt', 'desc')), (snapshot) => {
         const movementsList: Movement[] = [];
         snapshot.forEach((doc) => {
           movementsList.push({ id: doc.id, ...doc.data() } as Movement);
