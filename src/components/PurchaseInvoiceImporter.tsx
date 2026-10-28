@@ -476,6 +476,7 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
   const [successSummary, setSuccessSummary] = useState<{ 
     totalQty: number; 
     linesCount: number; 
@@ -606,6 +607,7 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     setErrorMessage(null);
+    setFallbackNotice(null);
     setAnalysisProgress('Lecture des documents en cours...');
 
     try {
@@ -682,19 +684,73 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
         const base64Pdf = await readFileAsBase64(selectedFile);
 
         setAnalysisProgress('Analyse du document et extraction des données...');
-        const res = await fetch('/api/gemini/parse-purchase-invoice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pdfBase64: base64Pdf,
-            existingCatalog: catalogForAi
-          })
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || 'Erreur lors de l\'analyse du PDF. Vous pouvez passer en saisie manuelle.');
+        let apiSucceeded = false;
+        try {
+          const res = await fetch('/api/gemini/parse-purchase-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pdfBase64: base64Pdf,
+              existingCatalog: catalogForAi
+            })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.isLocalFallback && data?.extractedText) {
+              setAnalysisProgress('Extraction directe du texte et rapprochement avec la cave...');
+              const localParsed = parseTextInvoiceLocally(
+                data.extractedText,
+                wines,
+                defaultSite,
+                supplierName
+              );
+              if (localParsed.items.length > 0) {
+                extractedData = {
+                  supplierName: localParsed.supplierName || supplierName,
+                  invoiceNumber: localParsed.invoiceNumber || invoiceNumber,
+                  invoiceDate: localParsed.invoiceDate || invoiceDate,
+                  totalShippingCostHt: localParsed.shippingTotal,
+                  items: localParsed.items
+                };
+                usedLocalFallback = true;
+                apiSucceeded = true;
+                setFallbackNotice(data.warning || "Facture extraite avec succès via le moteur local d'urgence (service restaurant garanti).");
+              }
+            } else if (data && Array.isArray(data.items) && data.items.length > 0) {
+              extractedData = data;
+              apiSucceeded = true;
+            }
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            if (errData?.extractedText) {
+              const localParsed = parseTextInvoiceLocally(
+                errData.extractedText,
+                wines,
+                defaultSite,
+                supplierName
+              );
+              if (localParsed.items.length > 0) {
+                extractedData = {
+                  supplierName: localParsed.supplierName || supplierName,
+                  invoiceNumber: localParsed.invoiceNumber || invoiceNumber,
+                  invoiceDate: localParsed.invoiceDate || invoiceDate,
+                  totalShippingCostHt: localParsed.shippingTotal,
+                  items: localParsed.items
+                };
+                usedLocalFallback = true;
+                apiSucceeded = true;
+                setFallbackNotice("Facture extraite avec succès via le moteur de secours local.");
+              }
+            }
+          }
+        } catch (fetchErr: any) {
+          console.warn('[PurchaseInvoiceImporter] Fetch failed:', fetchErr);
         }
-        extractedData = await res.json();
+
+        if (!apiSucceeded || !extractedData || !extractedData.items || extractedData.items.length === 0) {
+          throw new Error('Impossible d\'extraire automatiquement les lignes de cette facture PDF. Vous pouvez passer en saisie manuelle ou copier-coller le texte dans l\'onglet Texte.');
+        }
       } else {
         if (!rawText.trim()) throw new Error('Veuillez coller le texte de la facture.');
         setAnalysisProgress('Analyse du texte brut...');
@@ -1394,6 +1450,22 @@ Domaine Roulot - Meursault Luchets 2021 - 6 bt - 110.00€ HT"
                 className="px-3 py-1.5 bg-rose-800 hover:bg-rose-900 text-white rounded-lg text-xs font-bold cursor-pointer shrink-0 transition-colors"
               >
                 Passer en saisie manuelle →
+              </button>
+            </div>
+          )}
+
+          {fallbackNotice && (
+            <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>{fallbackNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFallbackNotice(null)}
+                className="text-amber-800 hover:text-amber-950 font-bold text-xs cursor-pointer select-none"
+              >
+                Fermer
               </button>
             </div>
           )}

@@ -26,12 +26,75 @@ async function extractTextFromPdf(base64Data: string): Promise<string> {
       await parser.load();
     }
     const parsed = await parser.getText();
+    if (typeof parser.destroy === "function") {
+      try { await parser.destroy(); } catch (_) {}
+    }
     return parsed?.text?.trim() || "";
   } catch (err) {
     console.warn("[PDFParse] Could not extract direct text from PDF:", err);
     return "";
   }
 }
+
+/**
+ * Bulletproof JSON cleaner & parser for AI responses:
+ * Handles Markdown code fences (```json ... ```), raw objects, preamble/postamble notes,
+ * and extracts the outermost JSON structure safely.
+ */
+function cleanAndParseJson<T = any>(rawText: string): T {
+  if (!rawText || typeof rawText !== "string") {
+    throw new Error("Contenu vide reçu du modèle.");
+  }
+
+  let text = rawText.trim();
+
+  // Strip markdown code fences ```json ... ``` or ``` ... ```
+  if (text.startsWith("```")) {
+    text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  } else {
+    const markdownMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (markdownMatch) {
+      text = markdownMatch[1].trim();
+    }
+  }
+
+  // 1. Direct parse attempt on cleaned text
+  try {
+    return JSON.parse(text);
+  } catch (initialErr) {
+    // 2. Locate outermost JSON object or array
+    const firstBrace = text.indexOf("{");
+    const lastBrace = text.lastIndexOf("}");
+    const firstBracket = text.indexOf("[");
+    const lastBracket = text.lastIndexOf("]");
+
+    let candidate = "";
+    if (firstBrace !== -1 && lastBrace > firstBrace && (firstBracket === -1 || firstBrace < firstBracket)) {
+      candidate = text.slice(firstBrace, lastBrace + 1);
+    } else if (firstBracket !== -1 && lastBracket > firstBracket) {
+      candidate = text.slice(firstBracket, lastBracket + 1);
+    }
+
+    if (candidate) {
+      try {
+        return JSON.parse(candidate);
+      } catch (_) {
+        // Fall through
+      }
+    }
+
+    throw initialErr;
+  }
+}
+
+// Battle-tested Gemini model sequence in order of stability, latency & quota limits
+const DEFAULT_GEMINI_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.8-flash",
+  "gemini-flash-latest",
+  "gemini-2.0-flash"
+];
 
 async function startServer() {
   const app = express();
@@ -173,7 +236,7 @@ Fournis une réponse au format JSON strict.`;
         required: ["items"]
       };
 
-      const modelsToTry = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+      const modelsToTry = DEFAULT_GEMINI_MODELS;
       let result: any = null;
       let lastError: any = null;
 
@@ -188,7 +251,7 @@ Fournis une réponse au format JSON strict.`;
               responseSchema: salesReceiptSchema
             }
           });
-          result = JSON.parse(response?.text || "{}");
+          result = cleanAndParseJson(response?.text || "{}");
           console.log(`[API/gemini/parse-sales-receipt] Success with ${modelName}`);
           break;
         } catch (modelErr: any) {
@@ -205,7 +268,7 @@ Fournis une réponse au format JSON strict.`;
                   responseSchema: salesReceiptSchema
                 }
               });
-              result = JSON.parse(textResp?.text || "{}");
+              result = cleanAndParseJson(textResp?.text || "{}");
               console.log(`[API/gemini/parse-sales-receipt] Text-only payload succeeded on ${modelName}`);
               break;
             } catch (fallbackErr: any) {
@@ -216,12 +279,35 @@ Fournis une réponse au format JSON strict.`;
       }
 
       if (!result) {
+        if (extractedPdfText && extractedPdfText.trim().length > 0) {
+          console.warn("[API/gemini/parse-sales-receipt] Gemini models unavailable, returning extracted text for local fallback.");
+          return res.json({
+            isLocalFallback: true,
+            extractedText: extractedPdfText,
+            items: [],
+            warning: "L'IA est temporairement indisponible. Le texte du ticket a été extrait pour traitement local."
+          });
+        }
         throw lastError || new Error("Impossible d'extraire les données du ticket de caisse.");
       }
 
       res.json(result);
     } catch (error: any) {
       console.error("[API/gemini/parse-sales-receipt] Error parsing receipt:", error);
+      const cleanBase64 = req.body?.pdfBase64 ? cleanBase64Payload(req.body.pdfBase64) : "";
+      if (cleanBase64) {
+        try {
+          const fallbackText = await extractTextFromPdf(cleanBase64);
+          if (fallbackText) {
+            return res.json({
+              isLocalFallback: true,
+              extractedText: fallbackText,
+              items: [],
+              warning: "L'IA a rencontré une erreur temporaire. Le texte du ticket a été extrait pour traitement local."
+            });
+          }
+        } catch (_) {}
+      }
       res.status(500).json({ error: error.message || "Erreur lors de l'analyse du ticket de caisse par l'IA." });
     }
   });
@@ -231,13 +317,26 @@ Fournis une réponse au format JSON strict.`;
     console.log("[API/gemini/parse-purchase-invoice] Parsing supplier purchase invoice...");
     try {
       const apiKey = process.env.GEMINI_API_KEY;
+      const { pdfBase64, rawText, rawRows, existingCatalog } = req.body || {};
+      const cleanBase64 = pdfBase64 ? cleanBase64Payload(pdfBase64) : "";
+
       if (!apiKey) {
+        console.warn("[API/gemini/parse-purchase-invoice] GEMINI_API_KEY not configured on server.");
+        if (cleanBase64) {
+          const directText = await extractTextFromPdf(cleanBase64);
+          if (directText && directText.trim().length > 0) {
+            return res.json({
+              isLocalFallback: true,
+              extractedText: directText,
+              items: [],
+              warning: "Clé Gemini absente sur le serveur. Détection automatique locale activée."
+            });
+          }
+        }
         return res.status(500).json({ 
           error: "La clé API Gemini (GEMINI_API_KEY) n'est pas configurée sur le serveur." 
         });
       }
-
-      const { pdfBase64, rawText, rawRows, existingCatalog } = req.body || {};
 
       const ai = new GoogleGenAI({
         apiKey,
@@ -287,7 +386,6 @@ Extrais rigoureusement :
   - matchedWineId : ID du vin existant dans le catalogue si reconnu, ou chaîne vide si non trouvé
   - isNewReference : true si le vin semble être une nouvelle référence à créer en cave`;
 
-      const cleanBase64 = pdfBase64 ? cleanBase64Payload(pdfBase64) : "";
       let extractedPdfText = "";
       if (cleanBase64) {
         extractedPdfText = await extractTextFromPdf(cleanBase64);
@@ -356,7 +454,7 @@ Extrais rigoureusement :
       };
 
       // Valid current models in priority order
-      const modelsToTry = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+      const modelsToTry = DEFAULT_GEMINI_MODELS;
       let result: any = null;
       let lastError: any = null;
 
@@ -374,7 +472,7 @@ Extrais rigoureusement :
             });
 
             const responseText = response?.text || "{}";
-            result = JSON.parse(responseText);
+            result = cleanAndParseJson(responseText);
             console.log(`[API/gemini/parse-purchase-invoice] Success with ${modelName}`);
             break;
           } catch (modelErr: any) {
@@ -394,7 +492,7 @@ Extrais rigoureusement :
                     responseSchema: invoiceSchema
                   }
                 });
-                result = JSON.parse(textResp?.text || "{}");
+                result = cleanAndParseJson(textResp?.text || "{}");
                 console.log(`[API/gemini/parse-purchase-invoice] Text-only payload succeeded on ${modelName}`);
                 break;
               } catch (fallbackErr: any) {
@@ -412,6 +510,15 @@ Extrais rigoureusement :
       }
 
       if (!result || !Array.isArray(result.items)) {
+        if (extractedPdfText && extractedPdfText.trim().length > 0) {
+          console.warn("[API/gemini/parse-purchase-invoice] AI unavailable, returning extracted text for local fallback.");
+          return res.json({
+            isLocalFallback: true,
+            extractedText: extractedPdfText,
+            items: [],
+            warning: "L'intelligence artificielle est temporairement indisponible. Le texte de la facture a été extrait pour analyse locale."
+          });
+        }
         throw lastError || new Error("Impossible d'extraire les données de la facture avec les modèles disponibles.");
       }
 
@@ -470,6 +577,20 @@ Extrais rigoureusement :
       res.json(result);
     } catch (error: any) {
       console.error("[API/gemini/parse-purchase-invoice] Error parsing invoice:", error);
+      const cleanBase64 = req.body?.pdfBase64 ? cleanBase64Payload(req.body.pdfBase64) : "";
+      if (cleanBase64) {
+        try {
+          const fallbackText = await extractTextFromPdf(cleanBase64);
+          if (fallbackText) {
+            return res.json({
+              isLocalFallback: true,
+              extractedText: fallbackText,
+              items: [],
+              warning: "L'intelligence artificielle a rencontré une erreur. La facture a été analysée via le moteur local d'extraction."
+            });
+          }
+        } catch (_) {}
+      }
       res.status(500).json({ error: error.message || "Erreur lors de l'analyse de la facture d'achat par l'IA." });
     }
   });
@@ -537,7 +658,7 @@ Champs requis dans l'objet JSON :
   - garde : Potentiel de garde (ex: 5 à 12 ans, Prêt à boire)
   - accords : Accords mets-vins parfaits pour la gastronomie (ex: Homard grillé, ris de veau aux morilles, poissons nobles)`;
 
-      const modelsToTry = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+      const modelsToTry = DEFAULT_GEMINI_MODELS;
       let responseText = "";
       let lastError = null;
 
@@ -614,15 +735,7 @@ Champs requis dans l'objet JSON :
         throw lastError || new Error("Aucune réponse n'a été retournée par le modèle.");
       }
 
-      // Safe markdown strip
-      let cleaned = responseText.trim();
-      if (cleaned.startsWith('```json')) {
-        cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-      } else if (cleaned.startsWith('```')) {
-        cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
-      }
-
-      const sheetData = JSON.parse(cleaned);
+      const sheetData = cleanAndParseJson(responseText);
 
       // Ensure proper structure
       const sanitizedSheet = {
@@ -703,7 +816,7 @@ Région/Terroir : ${region || 'N/C'}
 Le ton doit être extrêmement professionnel, poétique, élégant, digne d'un restaurant gastronomique étoilé (Savoir-faire, noblesse, terroir).
 Reste concis (environ 3-4 phrases courtes). Ne mets pas de titres, écris directement le paragraphe d'introduction de dégustation. Ne commence pas par des guillemets.`;
 
-      const modelsToTry = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+      const modelsToTry = DEFAULT_GEMINI_MODELS;
       let responseText = "";
       let lastError = null;
 
@@ -795,7 +908,7 @@ Extrais rigoureusement les informations dans l'objet JSON structuré suivant :
   - accords : Accords mets-vins recommandés`;
 
       console.log("[API/gemini/extract-technical-sheet] Calling Gemini for extraction...");
-      const modelsToTry = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+      const modelsToTry = DEFAULT_GEMINI_MODELS;
       let responseText = "";
       let lastError = null;
 
@@ -857,14 +970,7 @@ Extrais rigoureusement les informations dans l'objet JSON structuré suivant :
         throw lastError || new Error("Aucune réponse du modèle.");
       }
 
-      let cleaned = responseText.trim();
-      if (cleaned.startsWith('```json')) {
-        cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-      } else if (cleaned.startsWith('```')) {
-        cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
-      }
-
-      const sheetData = JSON.parse(cleaned);
+      const sheetData = cleanAndParseJson(responseText);
       res.json(sheetData);
     } catch (error: any) {
       console.error("[API/gemini/extract-technical-sheet] Error during extraction:", error);

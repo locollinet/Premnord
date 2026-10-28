@@ -205,10 +205,34 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
         });
 
         if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Erreur lors de l\'interprétation du PDF de caisse.');
+          const err = await response.json().catch(() => ({}));
+          if (err?.extractedText) {
+            const lines = (err.extractedText as string).split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 2);
+            extractedData = {
+              items: lines.map((line: string) => ({
+                rawLabel: line,
+                isBeverageOrWine: true,
+                quantity: 1
+              }))
+            };
+          } else {
+            throw new Error(err.error || 'Erreur lors de l\'interprétation du PDF de caisse.');
+          }
+        } else {
+          const data = await response.json();
+          if (data?.isLocalFallback && data?.extractedText) {
+            const lines = (data.extractedText as string).split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 2);
+            extractedData = {
+              items: lines.map((line: string) => ({
+                rawLabel: line,
+                isBeverageOrWine: true,
+                quantity: 1
+              }))
+            };
+          } else {
+            extractedData = data;
+          }
         }
-        extractedData = await response.json();
       }
 
       // 3. RAW TEXT COPIED / PASTED
