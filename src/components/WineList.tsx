@@ -6,7 +6,7 @@ import { classifyWineRegionAndSubRegion } from '../lib/wineGrouping';
 import { exportLiveStockToExcel } from '../lib/accountingExportXlsx';
 import { MultiSiteDispatchModal } from './MultiSiteDispatchModal';
 import { ZeroStockManagementModal } from './ZeroStockManagementModal';
-import { Search, Plus, Filter, ArrowUpDown, ChevronRight, SlidersHorizontal, AlertTriangle, Check, RefreshCw, ArrowRightLeft, FileSpreadsheet, X, Package, Download, Sparkles, Trash2 } from 'lucide-react';
+import { Search, Plus, Filter, ArrowUpDown, ChevronRight, SlidersHorizontal, AlertTriangle, Check, RefreshCw, ArrowRightLeft, FileSpreadsheet, X, Package, Download, Sparkles, Trash2, EyeOff } from 'lucide-react';
 
 interface WineListProps {
   onSelectWine: (wineId: string) => void;
@@ -36,6 +36,7 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [selectedDomain, setSelectedDomain] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'normal' | 'alert' | 'empty'>('all');
+  const [excludeZeroStock, setExcludeZeroStock] = useState<boolean>(false);
   const [volumeFilterType, setVolumeFilterType] = useState<'all' | 'greater_than' | 'less_than'>('all');
   const [volumeFilterValue, setVolumeFilterValue] = useState<string>('12');
   const [priceFilterType, setPriceFilterType] = useState<'all' | 'less_than' | 'greater_than'>('all');
@@ -51,7 +52,7 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
 
   React.useEffect(() => {
     setVisibleCount(30);
-  }, [searchTerm, selectedColor, selectedSite, selectedRegion, selectedDomain, stockFilter, volumeFilterType, volumeFilterValue, priceFilterType, priceFilterValue, sortBy, sortOrder, searchContext]);
+  }, [searchTerm, selectedColor, selectedSite, selectedRegion, selectedDomain, stockFilter, excludeZeroStock, volumeFilterType, volumeFilterValue, priceFilterType, priceFilterValue, sortBy, sortOrder, searchContext]);
 
   // Precompute lookup map of total stock per reference key across all sites
   const totalStockByRefKey = React.useMemo(() => {
@@ -290,6 +291,15 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
         matchesStock = wine.quantity > wine.alertThreshold;
       }
 
+      // Exclude references with 0 stock when active
+      let matchesExcludeZero = true;
+      if (excludeZeroStock) {
+        const refStock = (selectedSite === 'all' && searchContext === 'global')
+          ? (totalStockByRefKey.get(getWineReferenceKey(wine)) ?? wine.quantity)
+          : wine.quantity;
+        matchesExcludeZero = refStock > 0;
+      }
+
       // Quantity / Volume filter (detects large stock volumes)
       let matchesVolume = true;
       if (volumeFilterType !== 'all' && volumeFilterValue !== '') {
@@ -335,9 +345,9 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
         matchesDomain = wineDomain === targetDomain || canonicalDomain === targetDomain;
       }
 
-      return matchesSearch && matchesColor && matchesSite && matchesStock && matchesVolume && matchesPrice && matchesRegion && matchesDomain;
+      return matchesSearch && matchesColor && matchesSite && matchesStock && matchesExcludeZero && matchesVolume && matchesPrice && matchesRegion && matchesDomain;
     });
-  }, [wines, sites, searchTerm, selectedColor, searchContext, selectedSite, selectedRegion, selectedDomain, stockFilter, volumeFilterType, volumeFilterValue, priceFilterType, priceFilterValue, wineMatchesRegionFilter, totalStockByRefKey]);
+  }, [wines, sites, searchTerm, selectedColor, searchContext, selectedSite, selectedRegion, selectedDomain, stockFilter, excludeZeroStock, volumeFilterType, volumeFilterValue, priceFilterType, priceFilterValue, wineMatchesRegionFilter, totalStockByRefKey]);
 
   // Compute live synthesis metrics for the filtered selection
   const selectionStats = React.useMemo(() => {
@@ -364,6 +374,10 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
   // Active filter label for summary and banner
   const activeSelectionLabel = React.useMemo(() => {
     const parts: string[] = [];
+
+    if (excludeZeroStock) {
+      parts.push('En stock (> 0 bt)');
+    }
 
     if (volumeFilterType !== 'all' && volumeFilterValue) {
       if (volumeFilterType === 'greater_than') {
@@ -396,7 +410,7 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
       return parts.join(' • ');
     }
     return null;
-  }, [selectedRegion, selectedDomain, volumeFilterType, volumeFilterValue]);
+  }, [selectedRegion, selectedDomain, volumeFilterType, volumeFilterValue, excludeZeroStock]);
 
   // Sorting Logic
   const sortedWines = React.useMemo(() => {
@@ -655,8 +669,8 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
               </optgroup>
             </select>
 
-            {/* Bouton de réinitialisation rapide des filtres région / domaine / volume */}
-            {(selectedRegion !== 'all' || selectedDomain !== 'all' || volumeFilterType !== 'all') && (
+            {/* Bouton de réinitialisation rapide des filtres région / domaine / volume / stock 0 */}
+            {(selectedRegion !== 'all' || selectedDomain !== 'all' || volumeFilterType !== 'all' || excludeZeroStock) && (
               <button
                 type="button"
                 onClick={() => {
@@ -664,6 +678,7 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
                   setSelectedDomain('all');
                   setVolumeFilterType('all');
                   setVolumeFilterValue('12');
+                  setExcludeZeroStock(false);
                 }}
                 className="h-11 px-2.5 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 text-xs rounded-xl flex items-center gap-1 font-bold transition-all cursor-pointer select-none"
                 title="Effacer les filtres actifs"
@@ -688,6 +703,9 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
                   setVolumeFilterValue(val.replace('vol_', ''));
                 } else {
                   setStockFilter(val as any);
+                  if (val === 'empty') {
+                    setExcludeZeroStock(false);
+                  }
                   if (volumeFilterType === 'greater_than' && ['12', '24', '48', '60'].includes(volumeFilterValue)) {
                     setVolumeFilterType('all');
                   }
@@ -708,6 +726,36 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
                 <option value="vol_60">📦 Stock exceptionnel (≥ 60 bt)</option>
               </optgroup>
             </select>
+
+            {/* Bouton à part pour exclure les références à stock 0 */}
+            <button
+              type="button"
+              onClick={() => {
+                const nextState = !excludeZeroStock;
+                setExcludeZeroStock(nextState);
+                if (nextState && stockFilter === 'empty') {
+                  setStockFilter('all');
+                }
+              }}
+              className={`h-11 px-3.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 select-none ${
+                excludeZeroStock
+                  ? 'bg-slate-900 hover:bg-black text-white border-slate-900 shadow-sm'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+              }`}
+              title={excludeZeroStock ? "Désactiver le filtre (afficher également les références à stock 0)" : "Exclure toutes les références ayant 0 bouteille en stock"}
+            >
+              {excludeZeroStock ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Réf. à 0 exclues</span>
+                </>
+              ) : (
+                <>
+                  <EyeOff className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>Exclure réf. à 0</span>
+                </>
+              )}
+            </button>
 
             {/* Add Wine button */}
             <button
@@ -833,6 +881,24 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
 
             {/* Quick Clickable Preset Chips for Fast Sommelier Access */}
             <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextState = !excludeZeroStock;
+                  setExcludeZeroStock(nextState);
+                  if (nextState && stockFilter === 'empty') {
+                    setStockFilter('all');
+                  }
+                }}
+                className={`px-2 py-1 text-[11px] rounded-lg font-mono font-bold border transition-all cursor-pointer select-none ${
+                  excludeZeroStock
+                    ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+                title="Exclure les références à stock 0 (afficher uniquement les vins en stock)"
+              >
+                {excludeZeroStock ? '✓ > 0 bt' : '> 0 bt'}
+              </button>
               {[12, 24, 48, 60].map((preset) => {
                 const isSelected = volumeFilterType === 'greater_than' && volumeFilterValue === String(preset);
                 return (
@@ -929,6 +995,11 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
         <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 text-[10px] font-mono text-slate-500">
           <div>
             Résultats : <span className="text-slate-900 font-bold">{groupedWines.length}</span> référence{groupedWines.length > 1 ? 's' : ''} trouvée{groupedWines.length > 1 ? 's' : ''}
+            {excludeZeroStock && (
+              <span className="ml-1.5 text-emerald-800 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                (Stock &gt; 0 bt uniquement)
+              </span>
+            )}
             {volumeFilterType !== 'all' && volumeFilterValue && (
               <span className="ml-1.5 text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
                 ({volumeFilterType === 'greater_than' ? '≥' : '≤'} {volumeFilterValue} bt)
