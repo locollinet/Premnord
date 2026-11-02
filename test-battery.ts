@@ -4,7 +4,9 @@ import {
   calculateCellarAccounting, 
   consolidateStockRowsByReference,
   buildFilteredAccountingSummary,
-  getWineBuyPriceHt 
+  getWineBuyPriceHt,
+  REASON_LABELS,
+  REASON_BADGE_STYLES
 } from './src/lib/accountingCalculations';
 import { 
   exportAccountingToExcel, 
@@ -280,6 +282,52 @@ if (mergedRow) {
   assert(mergedRow.siteCount === 2, `SiteCount = 2 sites physiques (reçu: ${mergedRow.siteCount})`);
   assert(Boolean(mergedRow.sitesSummary?.includes('Cave Centrale') && mergedRow.sitesSummary?.includes('Restaurant')), 'SitesSummary récapitule les deux sites');
 }
+
+// ----------------------------------------------------
+// 8. TEST JUSTIFICATION DES MOUVEMENTS (VENTE, OFFERT, CASSE, BOUCHON, CORRECTION)
+// ----------------------------------------------------
+console.log('\n--- TEST 8: Justifications des Flux (Demande Oncle: Vente, Offert, Casse, Bouchon, Correction) ---');
+
+const testWines: Wine[] = [
+  { id: 'tw1', name: 'Chambertin', domain: 'Domaine Trapet', vintage: '2018', color: 'rouge', quantity: 20, priceBuyHt: 100, siteId: 's1' } as Wine,
+  { id: 'tw2', name: 'Meursault', domain: 'Domaine Roulot', vintage: '2020', color: 'blanc', quantity: 15, priceBuyHt: 80, siteId: 's1' } as Wine
+];
+
+const nowMs = customPeriod.startMs + 1000;
+const reasonMovements: Movement[] = [
+  { id: 'm-vente', wineId: 'tw1', wineName: 'Chambertin (2018)', type: 'out', quantity: 4, reason: 'vente', userId: 'u1', userName: 'Alice', createdAt: nowMs },
+  { id: 'm-offert', wineId: 'tw1', wineName: 'Chambertin (2018)', type: 'out', quantity: 1, reason: 'offert', userId: 'u1', userName: 'Alice', createdAt: nowMs + 10 },
+  { id: 'm-casse', wineId: 'tw1', wineName: 'Chambertin (2018)', type: 'out', quantity: 1, reason: 'casse', userId: 'u1', userName: 'Alice', createdAt: nowMs + 20 },
+  { id: 'm-bouchon', wineId: 'tw2', wineName: 'Meursault (2020)', type: 'out', quantity: 2, reason: 'bouchon', userId: 'u1', userName: 'Alice', createdAt: nowMs + 30 },
+  { id: 'm-correction', wineId: 'tw2', wineName: 'Meursault (2020)', type: 'correction', quantity: 3, reason: 'correction', userId: 'u1', userName: 'Alice', createdAt: nowMs + 40 },
+  { id: 'm-livraison', wineId: 'tw2', wineName: 'Meursault (2020)', type: 'in', quantity: 6, reason: 'livraison', userId: 'u1', userName: 'Alice', createdAt: nowMs + 50 },
+];
+
+const reasonResult = calculateCellarAccounting(testWines, reasonMovements, customPeriod, dummySites, 'all', 'all');
+
+assert(reasonResult.summary.breakdownByReason.length === 6, `Nombre de motifs dans la synthèse = 6 (obtenu: ${reasonResult.summary.breakdownByReason.length})`);
+
+const venteStat = reasonResult.summary.breakdownByReason.find(r => r.reason === 'vente');
+assert(Boolean(venteStat && venteStat.bottles === 4 && venteStat.valueHt === 400), `Stat Vente: 4 bt, 400 € HT (obtenu: ${venteStat?.bottles} bt, ${venteStat?.valueHt} €)`);
+
+const offertStat = reasonResult.summary.breakdownByReason.find(r => r.reason === 'offert');
+assert(Boolean(offertStat && offertStat.bottles === 1 && offertStat.valueHt === 100), `Stat Offert: 1 bt, 100 € HT (obtenu: ${offertStat?.bottles} bt, ${offertStat?.valueHt} €)`);
+
+const casseStat = reasonResult.summary.breakdownByReason.find(r => r.reason === 'casse');
+assert(Boolean(casseStat && casseStat.bottles === 1 && casseStat.valueHt === 100), `Stat Casse: 1 bt, 100 € HT (obtenu: ${casseStat?.bottles} bt, ${casseStat?.valueHt} €)`);
+
+const bouchonStat = reasonResult.summary.breakdownByReason.find(r => r.reason === 'bouchon');
+assert(Boolean(bouchonStat && bouchonStat.bottles === 2 && bouchonStat.valueHt === 160), `Stat Bouchon: 2 bt, 160 € HT (obtenu: ${bouchonStat?.bottles} bt, ${bouchonStat?.valueHt} €)`);
+
+const corrStat = reasonResult.summary.breakdownByReason.find(r => r.reason === 'correction');
+assert(Boolean(corrStat && corrStat.bottles === 3 && corrStat.valueHt === 240), `Stat Correction: 3 bt, 240 € HT (obtenu: ${corrStat?.bottles} bt, ${corrStat?.valueHt} €)`);
+
+// Test REASON_LABELS
+assert(REASON_LABELS['vente'] === 'Vente', 'REASON_LABELS contient Vente');
+assert(REASON_LABELS['offert'] !== undefined, 'REASON_LABELS contient Offert');
+assert(REASON_LABELS['casse'] === 'Casse', 'REASON_LABELS contient Casse');
+assert(REASON_LABELS['bouchon'] === 'Bouchon', 'REASON_LABELS contient Bouchon');
+assert(REASON_LABELS['correction'] !== undefined, 'REASON_LABELS contient Correction');
 
 console.log('\n====================================================');
 console.log(`📊 BILAN DES TESTS : ${passedTests} / ${totalTests} RÉUSSIS`);

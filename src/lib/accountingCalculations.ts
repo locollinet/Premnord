@@ -94,6 +94,28 @@ export interface MovementAccountingRow {
   notes?: string;
 }
 
+export const REASON_LABELS: Record<string, string> = {
+  vente: 'Vente',
+  offert: 'Offert (hors facture / dégustation)',
+  casse: 'Casse',
+  bouchon: 'Bouchon',
+  correction: 'Correction inventaire',
+  livraison: 'Livraison fournisseur',
+  transfert: 'Transfert de cave',
+  autre: 'Autre mouvement'
+};
+
+export const REASON_BADGE_STYLES: Record<string, { label: string; badge: string; dot: string }> = {
+  vente: { label: 'Vente', badge: 'bg-emerald-50 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500' },
+  offert: { label: 'Offert', badge: 'bg-purple-50 text-purple-800 border-purple-200', dot: 'bg-purple-500' },
+  casse: { label: 'Casse', badge: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
+  bouchon: { label: 'Bouchon', badge: 'bg-rose-50 text-rose-800 border-rose-200', dot: 'bg-rose-500' },
+  correction: { label: 'Correction', badge: 'bg-sky-50 text-sky-800 border-sky-200', dot: 'bg-sky-500' },
+  livraison: { label: 'Livraison', badge: 'bg-teal-50 text-teal-800 border-teal-200', dot: 'bg-teal-500' },
+  transfert: { label: 'Transfert', badge: 'bg-blue-50 text-blue-800 border-blue-200', dot: 'bg-blue-500' },
+  autre: { label: 'Autre', badge: 'bg-slate-50 text-slate-700 border-slate-200', dot: 'bg-slate-400' }
+};
+
 export interface AccountingPeriodSummary {
   periodLabel: string;
   year: number;
@@ -135,6 +157,15 @@ export interface AccountingPeriodSummary {
   breakdownByColor: Array<{
     color: WineColor;
     colorLabel: string;
+    bottles: number;
+    valueHt: number;
+    sharePercent: number;
+  }>;
+
+  breakdownByReason: Array<{
+    reason: string;
+    reasonLabel: string;
+    count: number;
     bottles: number;
     valueHt: number;
     sharePercent: number;
@@ -568,15 +599,6 @@ export function calculateCellarAccounting(
     return true;
   });
 
-  const REASON_LABELS: Record<string, string> = {
-    livraison: 'Livraison fournisseur',
-    vente: 'Vente en salle / service',
-    casse: 'Casse / Bouteille perdue',
-    correction: 'Correction inventaire',
-    transfert: 'Transfert de cave',
-    autre: 'Autre mouvement'
-  };
-
   const TYPE_LABELS: Record<string, string> = {
     in: 'Entrée (+)',
     out: 'Sortie (-)',
@@ -701,6 +723,31 @@ export function calculateCellarAccounting(
     })
     .filter(b => b.bottles > 0 || b.valueHt > 0);
 
+  // Breakdown by Reason (Justifications de mouvements: Vente, Offert, Casse, Bouchon, Correction...)
+  const reasonTotals = new Map<string, { count: number; bottles: number; valueHt: number }>();
+  movementRows.forEach(m => {
+    const key = m.reason || 'autre';
+    const curr = reasonTotals.get(key) || { count: 0, bottles: 0, valueHt: 0 };
+    curr.count += 1;
+    curr.bottles += Math.abs(m.quantity);
+    curr.valueHt += m.totalValueHt;
+    reasonTotals.set(key, curr);
+  });
+
+  const totalMovementValue = Array.from(reasonTotals.values()).reduce((sum, item) => sum + item.valueHt, 0);
+
+  const breakdownByReason = Array.from(reasonTotals.entries()).map(([reasonKey, stats]) => {
+    const sharePercent = totalMovementValue > 0 ? (stats.valueHt / totalMovementValue) * 100 : 0;
+    return {
+      reason: reasonKey,
+      reasonLabel: REASON_LABELS[reasonKey] || reasonKey,
+      count: stats.count,
+      bottles: stats.bottles,
+      valueHt: stats.valueHt,
+      sharePercent
+    };
+  }).sort((a, b) => b.valueHt - a.valueHt);
+
   const siteFilterName = siteFilter === 'all' ? 'Tous les sites (Consolidé)' : (sitesMap.get(siteFilter) || siteFilter);
   const domainFilterName = domainFilter === 'prieure_roch' 
     ? 'Domaine Prieuré-Roch' 
@@ -735,7 +782,8 @@ export function calculateCellarAccounting(
       referencesWithStockCount,
       referencesWithMissingPriceCount,
       breakdownBySite,
-      breakdownByColor
+      breakdownByColor,
+      breakdownByReason
     }
   };
 }
@@ -830,6 +878,31 @@ export function buildFilteredAccountingSummary(
     })
     .filter(b => b.bottles > 0 || b.valueHt > 0);
 
+  // Breakdown by Reason for filtered movements
+  const reasonTotals = new Map<string, { count: number; bottles: number; valueHt: number }>();
+  movementRows.forEach(m => {
+    const key = m.reason || 'autre';
+    const curr = reasonTotals.get(key) || { count: 0, bottles: 0, valueHt: 0 };
+    curr.count += 1;
+    curr.bottles += Math.abs(m.quantity);
+    curr.valueHt += m.totalValueHt;
+    reasonTotals.set(key, curr);
+  });
+
+  const totalMovementValue = Array.from(reasonTotals.values()).reduce((sum, item) => sum + item.valueHt, 0);
+
+  const breakdownByReason = Array.from(reasonTotals.entries()).map(([reasonKey, stats]) => {
+    const sharePercent = totalMovementValue > 0 ? (stats.valueHt / totalMovementValue) * 100 : 0;
+    return {
+      reason: reasonKey,
+      reasonLabel: REASON_LABELS[reasonKey] || reasonKey,
+      count: stats.count,
+      bottles: stats.bottles,
+      valueHt: stats.valueHt,
+      sharePercent
+    };
+  }).sort((a, b) => b.valueHt - a.valueHt);
+
   return {
     ...baseSummary,
     generatedAt: new Date(),
@@ -849,7 +922,8 @@ export function buildFilteredAccountingSummary(
     referencesWithStockCount,
     referencesWithMissingPriceCount,
     breakdownBySite,
-    breakdownByColor
+    breakdownByColor,
+    breakdownByReason
   };
 }
 

@@ -207,7 +207,23 @@ export interface Wine {
 }
 
 export type MovementType = 'in' | 'out' | 'transfer' | 'correction';
-export type MovementReason = 'livraison' | 'vente' | 'casse' | 'correction' | 'transfert' | 'autre';
+export type MovementReason = 
+  | 'vente'
+  | 'offert'
+  | 'casse'
+  | 'bouchon'
+  | 'correction'
+  | 'livraison'
+  | 'transfert'
+  | 'autre';
+
+export const MOVEMENT_REASON_OPTIONS = [
+  { value: 'vente' as const, label: 'Vente', description: 'Service en salle / Vente client' },
+  { value: 'offert' as const, label: 'Offert', description: 'Offert (dégustation / geste commercial / hors facture)' },
+  { value: 'casse' as const, label: 'Casse', description: 'Casse / Bouteille cassée ou perdue' },
+  { value: 'bouchon' as const, label: 'Bouchon', description: 'Bouchon / Vin bouchonné / Défaut flacon' },
+  { value: 'correction' as const, label: 'Correction', description: 'Correction / Régularisation d\'inventaire' },
+] as const;
 
 export interface Movement {
   id: string;

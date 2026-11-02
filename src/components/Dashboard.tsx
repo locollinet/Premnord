@@ -3,6 +3,7 @@ import { useFirebase } from '../context/FirebaseContext';
 import { Wine as WineIcon, AlertTriangle, ArrowUpRight, ArrowDownLeft, RefreshCw, Layers, Euro, Activity, ShieldCheck, TrendingUp, Sparkles, Plus, AlertOctagon, CheckCircle, Eye, FileSpreadsheet } from 'lucide-react';
 import { WineColor, normalizeWineString, getCanonicalDomain, Wine } from '../types';
 import { DuplicateInspectionModal } from './DuplicateInspectionModal';
+import { REASON_LABELS, REASON_BADGE_STYLES } from '../lib/accountingCalculations';
 
 interface DashboardProps {
   onNavigateToWines: () => void;
@@ -519,8 +520,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToWines, onNavig
                           >
                             {mov.wineName}
                           </h4>
-                          <div className="flex flex-wrap gap-x-2 text-[10px] text-slate-400 mt-0.5 font-mono">
-                            <span className="uppercase font-bold text-red-600">{mov.reason}</span>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-400 mt-1 font-mono">
+                            <span className={`px-1.5 py-0.2 rounded font-bold uppercase border ${
+                              (REASON_BADGE_STYLES[mov.reason] || { badge: 'bg-slate-50 text-slate-700 border-slate-200' }).badge
+                            }`}>
+                              {REASON_LABELS[mov.reason] || mov.reason}
+                            </span>
                             <span>&bull;</span>
                             <span>Par {mov.userName}</span>
                             <span>&bull;</span>

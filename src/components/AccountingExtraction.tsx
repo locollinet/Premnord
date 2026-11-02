@@ -9,7 +9,9 @@ import {
   formatCurrencyFr, 
   formatCompactCurrencyFr,
   WineStockAccountingRow,
-  MovementAccountingRow
+  MovementAccountingRow,
+  REASON_LABELS,
+  REASON_BADGE_STYLES
 } from '../lib/accountingCalculations';
 import { exportAccountingToExcel, exportStockToCsv, exportDPRMonthlyExcel } from '../lib/accountingExportXlsx';
 import { classifyWineRegionAndSubRegion } from '../lib/wineGrouping';
@@ -42,7 +44,8 @@ import {
   Package, 
   X, 
   Clock,
-  Trash2
+  Trash2,
+  Activity
 } from 'lucide-react';
 import { WineColor, isDPRWine, getCanonicalDomain } from '../types';
 
@@ -110,6 +113,8 @@ export const AccountingExtraction: React.FC<AccountingExtractionProps> = ({ onSe
   const [volumeFilterType, setVolumeFilterType] = useState<'all' | 'greater_than' | 'less_than'>('all');
   const [volumeFilterValue, setVolumeFilterValue] = useState<string>('12');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [reasonFilter, setReasonFilter] = useState<string>('all');
+  const [movementTypeFilter, setMovementTypeFilter] = useState<string>('all');
   const [activeSubTab, setActiveSubTab] = useState<'stock' | 'movements' | 'summary'>('stock');
 
   // Multi-site reference consolidation mode: 'consolidated' (1 line per wine ref, recommended for accountants) vs 'by_site' (detailed physical site)
@@ -347,6 +352,12 @@ export const AccountingExtraction: React.FC<AccountingExtractionProps> = ({ onSe
       // Must be among the filtered wines
       if (!filteredWineIdSet.has(m.wineId)) return false;
       
+      // Filter by reason / justification
+      if (reasonFilter !== 'all' && m.reason !== reasonFilter) return false;
+
+      // Filter by movement type (out / in / transfer / correction)
+      if (movementTypeFilter !== 'all' && m.type !== movementTypeFilter) return false;
+
       // If search term is present, also match
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase().trim();
@@ -356,7 +367,27 @@ export const AccountingExtraction: React.FC<AccountingExtractionProps> = ({ onSe
 
       return true;
     });
-  }, [rawCellarAccounting.movementRows, filteredWineIdSet, searchTerm]);
+  }, [rawCellarAccounting.movementRows, filteredWineIdSet, reasonFilter, movementTypeFilter, searchTerm]);
+
+  // Movement counts & value by key reasons for quick pills in the movements tab
+  const movementReasonKPIs = useMemo(() => {
+    const map: Record<string, { count: number; bottles: number; valueHt: number }> = {
+      vente: { count: 0, bottles: 0, valueHt: 0 },
+      offert: { count: 0, bottles: 0, valueHt: 0 },
+      casse: { count: 0, bottles: 0, valueHt: 0 },
+      bouchon: { count: 0, bottles: 0, valueHt: 0 },
+      correction: { count: 0, bottles: 0, valueHt: 0 }
+    };
+    rawCellarAccounting.movementRows.forEach(m => {
+      if (!filteredWineIdSet.has(m.wineId)) return;
+      if (map[m.reason]) {
+        map[m.reason].count += 1;
+        map[m.reason].bottles += Math.abs(m.quantity);
+        map[m.reason].valueHt += m.totalValueHt;
+      }
+    });
+    return map;
+  }, [rawCellarAccounting.movementRows, filteredWineIdSet]);
 
   // Determine if any custom filter is active
   const isAnyFilterActive = useMemo(() => {
@@ -366,8 +397,10 @@ export const AccountingExtraction: React.FC<AccountingExtractionProps> = ({ onSe
            colorFilter !== 'all' || 
            stockStatusFilter !== 'all' || 
            volumeFilterType !== 'all' || 
+           reasonFilter !== 'all' ||
+           movementTypeFilter !== 'all' ||
            searchTerm.trim().length > 0;
-  }, [siteFilter, regionFilter, domainFilter, colorFilter, stockStatusFilter, volumeFilterType, searchTerm]);
+  }, [siteFilter, regionFilter, domainFilter, colorFilter, stockStatusFilter, volumeFilterType, reasonFilter, movementTypeFilter, searchTerm]);
 
   // Active filter label for summary and filename
   const activeSelectionLabel = useMemo(() => {
@@ -424,6 +457,8 @@ export const AccountingExtraction: React.FC<AccountingExtractionProps> = ({ onSe
     setStockStatusFilter('all');
     setVolumeFilterType('all');
     setVolumeFilterValue('12');
+    setReasonFilter('all');
+    setMovementTypeFilter('all');
     setSearchTerm('');
   };
 
@@ -1676,6 +1711,113 @@ export const AccountingExtraction: React.FC<AccountingExtractionProps> = ({ onSe
         {/* ==================================================== */}
         {activeSubTab === 'movements' && (
           <div className="space-y-4">
+
+            {/* Filter toolbar for movements (identique à Cave des Peress) */}
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-700 font-mono uppercase tracking-wide flex items-center gap-1.5">
+                    <Filter className="w-3.5 h-3.5 text-slate-500" />
+                    Filtrer les flux :
+                  </span>
+
+                  {/* Dropdown Motif / Justification (identique Cave des Peress) */}
+                  <select
+                    value={reasonFilter}
+                    onChange={(e) => {
+                      setReasonFilter(e.target.value);
+                      setMovementsPage(1);
+                    }}
+                    className={`border text-xs font-semibold rounded-xl px-3 py-1.5 outline-none cursor-pointer transition-colors ${
+                      reasonFilter !== 'all'
+                        ? 'bg-red-950 border-amber-500 text-amber-200 font-bold'
+                        : 'bg-white border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <option value="all">Tous les motifs (Justifications)</option>
+                    <option value="vente">🍷 Vente en salle / service</option>
+                    <option value="offert">🎁 Offert (hors facture / dégustation)</option>
+                    <option value="casse">💥 Casse / Bouteille perdue</option>
+                    <option value="bouchon">🍾 Bouchon / Vin bouchonné</option>
+                    <option value="correction">⚖️ Correction / Écart d'inventaire</option>
+                    <option value="livraison">📦 Livraison fournisseur</option>
+                    <option value="transfert">🔄 Transfert de cave</option>
+                    <option value="autre">📝 Autre mouvement</option>
+                  </select>
+
+                  {/* Dropdown Type (Entrée / Sortie / Transfert / Correction) */}
+                  <select
+                    value={movementTypeFilter}
+                    onChange={(e) => {
+                      setMovementTypeFilter(e.target.value);
+                      setMovementsPage(1);
+                    }}
+                    className={`border text-xs font-semibold rounded-xl px-3 py-1.5 outline-none cursor-pointer transition-colors ${
+                      movementTypeFilter !== 'all'
+                        ? 'bg-slate-900 border-slate-700 text-white font-bold'
+                        : 'bg-white border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <option value="all">Tous les types de flux</option>
+                    <option value="out">Sorties (-)</option>
+                    <option value="in">Entrées (+)</option>
+                    <option value="correction">Corrections</option>
+                    <option value="transfer">Transferts</option>
+                  </select>
+
+                  {(reasonFilter !== 'all' || movementTypeFilter !== 'all') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReasonFilter('all');
+                        setMovementTypeFilter('all');
+                        setMovementsPage(1);
+                      }}
+                      className="px-2.5 py-1 text-xs font-mono font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition-colors cursor-pointer"
+                    >
+                      Effacer filtre flux
+                    </button>
+                  )}
+                </div>
+
+                <div className="text-xs font-mono text-slate-500">
+                  <strong className="text-slate-900">{filteredMovementRows.length}</strong> mouvement(s) affiché(s)
+                </div>
+              </div>
+
+              {/* Raccourcis / Quick KPI pills pour les 5 motifs réglementaires */}
+              <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-200/60">
+                {[
+                  { key: 'vente', label: 'Vente', icon: '🍷', stats: movementReasonKPIs.vente, activeClass: 'bg-emerald-700 text-white border-emerald-700 shadow-xs', idleClass: 'bg-white hover:bg-emerald-50 text-slate-700 border-slate-200' },
+                  { key: 'offert', label: 'Offert', icon: '🎁', stats: movementReasonKPIs.offert, activeClass: 'bg-purple-700 text-white border-purple-700 shadow-xs', idleClass: 'bg-white hover:bg-purple-50 text-slate-700 border-slate-200' },
+                  { key: 'casse', label: 'Casse', icon: '💥', stats: movementReasonKPIs.casse, activeClass: 'bg-amber-700 text-white border-amber-700 shadow-xs', idleClass: 'bg-white hover:bg-amber-50 text-slate-700 border-slate-200' },
+                  { key: 'bouchon', label: 'Bouchon', icon: '🍾', stats: movementReasonKPIs.bouchon, activeClass: 'bg-rose-700 text-white border-rose-700 shadow-xs', idleClass: 'bg-white hover:bg-rose-50 text-slate-700 border-slate-200' },
+                  { key: 'correction', label: 'Correction', icon: '⚖️', stats: movementReasonKPIs.correction, activeClass: 'bg-sky-700 text-white border-sky-700 shadow-xs', idleClass: 'bg-white hover:bg-sky-50 text-slate-700 border-slate-200' }
+                ].map(p => {
+                  const isActive = reasonFilter === p.key;
+                  return (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => {
+                        setReasonFilter(prev => prev === p.key ? 'all' : p.key);
+                        setMovementsPage(1);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-mono transition-all cursor-pointer flex items-center gap-2 ${
+                        isActive ? p.activeClass : p.idleClass
+                      }`}
+                      title={`Filtrer instantanément sur les mouvements "${p.label}"`}
+                    >
+                      <span>{p.icon}</span>
+                      <span className="font-bold">{p.label} :</span>
+                      <span>{p.stats.bottles} bt</span>
+                      <span className="opacity-75 font-sans">({formatCompactCurrencyFr(p.stats.valueHt)})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="overflow-x-auto border border-slate-200 rounded-2xl max-h-[600px] overflow-y-auto scrollbar-thin">
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-slate-900 text-white sticky top-0 z-20 font-mono text-[11px] tracking-wide uppercase select-none">
@@ -1752,7 +1894,9 @@ export const AccountingExtraction: React.FC<AccountingExtractionProps> = ({ onSe
 
                           {/* Reason */}
                           <td className="py-2.5 px-3">
-                            <span className="font-medium text-slate-800">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border inline-block ${
+                              (REASON_BADGE_STYLES[m.reason] || { badge: 'bg-slate-50 text-slate-700 border-slate-200' }).badge
+                            }`}>
                               {m.reasonLabel}
                             </span>
                           </td>
@@ -1986,6 +2130,77 @@ export const AccountingExtraction: React.FC<AccountingExtractionProps> = ({ onSe
                 </table>
               </div>
 
+            </div>
+
+            {/* Table 4: Répartition & Justification des Flux par Motif (identique Cave des Peress) */}
+            <div className="border border-slate-200 rounded-2xl p-5 bg-white space-y-3 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-slate-700" />
+                  <h4 className="text-xs font-bold text-slate-900 font-mono uppercase tracking-wide">
+                    4. Justification des Flux par Motif (Vente, Offert, Casse, Bouchon, Correction)
+                  </h4>
+                </div>
+                <span className="text-[10px] font-mono font-bold text-slate-500 uppercase bg-slate-100 px-2 py-0.5 rounded">
+                  Contrôle fiscal & comptabilité matières
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border border-slate-100 rounded-xl overflow-hidden">
+                  <thead className="bg-slate-100 text-slate-700 font-mono text-[10px] uppercase">
+                    <tr>
+                      <th className="py-2.5 px-3">Motif de Mouvement (Justification)</th>
+                      <th className="py-2.5 px-2 text-right">Nb Écritures</th>
+                      <th className="py-2.5 px-3 text-right">Total Flacons (bt)</th>
+                      <th className="py-2.5 px-3 text-right">Valeur au Coût d'Achat HT</th>
+                      <th className="py-2.5 px-2 text-right">Part des Flux (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-sans">
+                    {(summary.breakdownByReason || []).map(r => {
+                      const badge = REASON_BADGE_STYLES[r.reason] || { badge: 'bg-slate-50 text-slate-700 border-slate-200' };
+                      return (
+                        <tr key={r.reason} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-2.5 px-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border inline-block ${badge.badge}`}>
+                              {r.reasonLabel}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2 text-right font-mono text-slate-600">{r.count}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{r.bottles} bt</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-800">{formatCurrencyFr(r.valueHt)}</td>
+                          <td className="py-2.5 px-2 text-right font-mono text-slate-500">{r.sharePercent.toFixed(1)}%</td>
+                        </tr>
+                      );
+                    })}
+                    {(!summary.breakdownByReason || summary.breakdownByReason.length === 0) && (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-slate-400 font-mono text-xs">
+                          Aucun mouvement enregistré pour cette période comptable.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  {summary.breakdownByReason && summary.breakdownByReason.length > 0 && (
+                    <tfoot className="bg-slate-50 font-mono font-bold text-xs border-t-2 border-slate-200">
+                      <tr>
+                        <td className="py-2.5 px-3 uppercase text-slate-800">Total Flux Période</td>
+                        <td className="py-2.5 px-2 text-right text-slate-800">
+                          {summary.breakdownByReason.reduce((sum, r) => sum + r.count, 0)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-slate-950">
+                          {summary.breakdownByReason.reduce((sum, r) => sum + r.bottles, 0)} bt
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-emerald-800">
+                          {formatCurrencyFr(summary.breakdownByReason.reduce((sum, r) => sum + r.valueHt, 0))}
+                        </td>
+                        <td className="py-2.5 px-2 text-right text-slate-800">100.0%</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
             </div>
 
           </div>

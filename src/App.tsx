@@ -398,6 +398,10 @@ function AppContent() {
               setIsAddingWine(true);
             }}
             onNavigateToAccounting={() => setActiveTab('accounting')}
+            onRecordMovement={(wine) => {
+              setWineForMovement(wine);
+              setIsAddingMovement(true);
+            }}
           />
         )}
 

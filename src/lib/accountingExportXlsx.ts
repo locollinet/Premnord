@@ -293,6 +293,29 @@ export function exportAccountingToExcel(
     ''
   ]);
 
+  // Breakdown by justification sub-totals at bottom of Mouvements
+  if (summary.breakdownByReason && summary.breakdownByReason.length > 0) {
+    movementsSheetAoa.push([]);
+    movementsSheetAoa.push(['DÉTAIL DES FLUX PAR MOTIF (JUSTIFICATIONS) :']);
+    summary.breakdownByReason.forEach(r => {
+      movementsSheetAoa.push([
+        `• ${r.reasonLabel}`,
+        '',
+        '',
+        '',
+        `${r.count} écriture(s)`,
+        r.bottles,
+        r.reasonLabel,
+        '',
+        '',
+        '',
+        Number(r.valueHt.toFixed(2)),
+        '',
+        `${r.sharePercent.toFixed(1)}% des flux`
+      ]);
+    });
+  }
+
   const movementsWorksheet = XLSX.utils.aoa_to_sheet(movementsSheetAoa);
 
   movementsWorksheet['!cols'] = [
@@ -311,6 +334,61 @@ export function exportAccountingToExcel(
     { wch: 36 }  // Notes
   ];
 
+  // ==========================================
+  // SHEET 2: SYNTHÈSE DES FLUX PAR MOTIF (VENTE, OFFERT, CASSE, BOUCHON, CORRECTION)
+  // ==========================================
+  const reasonSheetAoa: any[][] = [];
+  reasonSheetAoa.push(['PREMNORD - SYNTHÈSE DES MOUVEMENTS & JUSTIFICATIONS DE STOCK']);
+  reasonSheetAoa.push([`Période comptable : ${summary.periodLabel}`]);
+  reasonSheetAoa.push([`Périmètre sélectionné : ${summary.siteFilterName}`]);
+  reasonSheetAoa.push([`Date de l'arrêté de stock : ${summary.generatedAt.toLocaleString('fr-FR')}`]);
+  reasonSheetAoa.push([]);
+
+  reasonSheetAoa.push([
+    'Motif de Justification',
+    'Nombre d\'Écritures',
+    'Total Bouteilles (bt)',
+    'Valeur Totale HT (€)',
+    'Part des Flux (%)'
+  ]);
+
+  let totalReasonCount = 0;
+  let totalReasonQty = 0;
+  let totalReasonVal = 0;
+
+  (summary.breakdownByReason || []).forEach(r => {
+    totalReasonCount += r.count;
+    totalReasonQty += r.bottles;
+    totalReasonVal += r.valueHt;
+
+    reasonSheetAoa.push([
+      r.reasonLabel,
+      r.count,
+      r.bottles,
+      Number(r.valueHt.toFixed(2)),
+      Number(r.sharePercent.toFixed(1)) + '%'
+    ]);
+  });
+
+  reasonSheetAoa.push([]);
+  reasonSheetAoa.push([
+    'TOTAL TOUS MOTIFS',
+    totalReasonCount,
+    totalReasonQty,
+    Number(totalReasonVal.toFixed(2)),
+    '100.0%'
+  ]);
+
+  const reasonWorksheet = XLSX.utils.aoa_to_sheet(reasonSheetAoa);
+  reasonWorksheet['!cols'] = [
+    { wch: 36 }, // Motif
+    { wch: 20 }, // Nb écritures
+    { wch: 22 }, // Total Bouteilles
+    { wch: 24 }, // Valeur Totale HT
+    { wch: 18 }  // Part (%)
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, reasonWorksheet, 'Synthese_Motifs');
   XLSX.utils.book_append_sheet(workbook, movementsWorksheet, 'Mouvements');
 
   // ==========================================
@@ -398,6 +476,36 @@ export function exportAccountingToExcel(
     Number(summary.totalValueEndHt.toFixed(2)),
     '100.0%'
   ]);
+
+  // Section 4: Répartition par motif de mouvement (justifications fiscales & comptables)
+  if (summary.breakdownByReason && summary.breakdownByReason.length > 0) {
+    summarySheetAoa.push([]);
+    summarySheetAoa.push([]);
+    summarySheetAoa.push(['4. JUSTIFICATION DES MOUVEMENTS PAR MOTIF (VENTE, OFFERT, CASSE, BOUCHON, CORRECTION...)']);
+    summarySheetAoa.push(['Motif de Justification', 'Nombre d\'Écritures', 'Bouteilles Impactées (bt)', 'Valeur Totale (€ HT)', 'Part des Flux (%)']);
+    let totalRQty = 0;
+    let totalRVal = 0;
+    let totalRCount = 0;
+    summary.breakdownByReason.forEach(r => {
+      totalRCount += r.count;
+      totalRQty += r.bottles;
+      totalRVal += r.valueHt;
+      summarySheetAoa.push([
+        r.reasonLabel,
+        r.count,
+        r.bottles,
+        Number(r.valueHt.toFixed(2)),
+        Number(r.sharePercent.toFixed(1)) + '%'
+      ]);
+    });
+    summarySheetAoa.push([
+      'TOTAL FLUX PAR MOTIF',
+      totalRCount,
+      totalRQty,
+      Number(totalRVal.toFixed(2)),
+      '100.0%'
+    ]);
+  }
 
   const summaryWorksheet = XLSX.utils.aoa_to_sheet(summarySheetAoa);
 

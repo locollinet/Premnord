@@ -6,12 +6,13 @@ import { classifyWineRegionAndSubRegion } from '../lib/wineGrouping';
 import { exportLiveStockToExcel } from '../lib/accountingExportXlsx';
 import { MultiSiteDispatchModal } from './MultiSiteDispatchModal';
 import { ZeroStockManagementModal } from './ZeroStockManagementModal';
-import { Search, Plus, Filter, ArrowUpDown, ChevronRight, SlidersHorizontal, AlertTriangle, Check, RefreshCw, ArrowRightLeft, FileSpreadsheet, X, Package, Download, Sparkles, Trash2, EyeOff } from 'lucide-react';
+import { Search, Plus, Filter, ArrowUpDown, ChevronRight, SlidersHorizontal, AlertTriangle, Check, RefreshCw, ArrowRightLeft, FileSpreadsheet, X, Package, Download, Sparkles, Trash2, EyeOff, Scale } from 'lucide-react';
 
 interface WineListProps {
   onSelectWine: (wineId: string) => void;
   onAddWine: () => void;
   onNavigateToAccounting?: () => void;
+  onRecordMovement?: (wine: Wine) => void;
 }
 
 const COLOR_BADGES: Record<WineColor, { label: string; badge: string }> = {
@@ -26,7 +27,7 @@ const COLOR_BADGES: Record<WineColor, { label: string; badge: string }> = {
   autre: { label: 'Autre', badge: 'bg-slate-50 text-slate-700 border-slate-200' }
 };
 
-export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onNavigateToAccounting }) => {
+export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onNavigateToAccounting, onRecordMovement }) => {
   const { wines, sites, updateWine, addMovement } = useFirebase();
 
   // Search & Filter state
@@ -1276,6 +1277,18 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
                               </span>
                               
                               <div className="flex items-center gap-1">
+                                {onRecordMovement && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onRecordMovement(siteWine);
+                                    }}
+                                    className="w-7 h-7 bg-white hover:bg-amber-50 text-slate-500 hover:text-amber-700 border border-slate-200 hover:border-amber-200 rounded-lg flex items-center justify-center transition-all active:scale-95 cursor-pointer select-none"
+                                    title="Ajuster le stock & justifier le motif (Vente, Offert, Casse, Bouchon, Correction)"
+                                  >
+                                    <Scale className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 <button
                                   onClick={(e) => handleQuickStockChange(e, siteWine, -1)}
                                   disabled={siteWine.quantity === 0 || adjustingId !== null}

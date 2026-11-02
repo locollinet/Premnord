@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Wine, Movement, isSameWineReference, TechnicalSheet } from '../types';
+import { REASON_LABELS, REASON_BADGE_STYLES } from '../lib/accountingCalculations';
 import { MultiSiteDispatchModal } from './MultiSiteDispatchModal';
 import { 
   X, 
@@ -1132,9 +1133,13 @@ export const WineDetailModal: React.FC<WineDetailModalProps> = ({ wineId, onClos
                             </div>
 
                             <div className="min-w-0 space-y-0.5">
-                              <p className="text-slate-800 font-medium leading-normal text-xs">
-                                <span className="uppercase font-mono font-bold text-red-600 mr-1.5">{mov.reason}</span>
-                                {mov.notes && <span className="text-slate-500 font-serif"> - "{mov.notes}"</span>}
+                              <p className="text-slate-800 font-medium leading-normal text-xs flex items-center flex-wrap gap-1">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+                                  (REASON_BADGE_STYLES[mov.reason] || { badge: 'bg-slate-50 text-slate-700 border-slate-200' }).badge
+                                }`}>
+                                  {REASON_LABELS[mov.reason] || mov.reason}
+                                </span>
+                                {mov.notes && <span className="text-slate-500 font-serif text-[11px]"> - "{mov.notes}"</span>}
                               </p>
                               <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
                                 <span>Par {mov.userName}</span>

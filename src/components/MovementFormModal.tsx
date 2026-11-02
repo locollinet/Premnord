@@ -213,10 +213,6 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
         });
 
       } else if (type === 'correction') {
-        // Treat correction as setting or adjusting stock
-        // For simple adjustments, we add if positive, or subtract if negative.
-        // Let's assume correction here behaves like an addition by default.
-        // If notes mention manual inventory audit, we update accordingly.
         const finalQty = wine.quantity + quantity;
         await updateWine(wine.id, { quantity: finalQty }, 'stock');
 
@@ -225,7 +221,7 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
           wineName: `${wine.name} (${wine.vintage})`,
           type: 'correction',
           quantity,
-          reason: 'correction',
+          reason,
           notes: notes.trim() || undefined,
           toSiteId: wine.siteId
         });
@@ -460,7 +456,7 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
                 value={reason}
                 onChange={(e) => setReason(e.target.value as MovementReason)}
                 required
-                className="w-full h-11 bg-slate-50 border border-slate-200 focus:border-red-500 text-slate-700 text-xs rounded-xl px-3 outline-none cursor-pointer"
+                className="w-full h-11 bg-slate-50 border border-slate-200 focus:border-red-500 text-slate-700 text-xs rounded-xl px-3 outline-none cursor-pointer font-medium"
               >
                 {type === 'in' && (
                   <>
@@ -471,9 +467,11 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
                 )}
                 {type === 'out' && (
                   <>
-                    <option value="vente">Service client / Vente à la table</option>
-                    <option value="casse">Casse / Perte en cave / Bouchonné</option>
-                    <option value="correction">Correction négative d'inventaire</option>
+                    <option value="vente">Vente</option>
+                    <option value="offert">Offert</option>
+                    <option value="casse">Casse</option>
+                    <option value="bouchon">Bouchon</option>
+                    <option value="correction">Correction</option>
                     <option value="autre">Autre sortie de stock</option>
                   </>
                 )}
@@ -482,13 +480,42 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
                 )}
                 {type === 'correction' && (
                   <>
-                    <option value="correction">Audit d'inventaire manuel</option>
+                    <option value="correction">Correction / Audit d'inventaire</option>
+                    <option value="vente">Vente</option>
+                    <option value="offert">Offert</option>
+                    <option value="casse">Casse</option>
+                    <option value="bouchon">Bouchon</option>
                     <option value="livraison">Livraison tardive régularisée</option>
-                    <option value="casse">Casse constatée après coup</option>
                     <option value="autre">Autre ajustement manuel</option>
                   </>
                 )}
               </select>
+
+              {/* Raccourcis rapides pour les 5 motifs réglementaires (Vente, Offert, Casse, Bouchon, Correction) */}
+              {(type === 'out' || type === 'correction') && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {[
+                    { key: 'vente' as const, label: 'Vente', color: 'hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300' },
+                    { key: 'offert' as const, label: 'Offert', color: 'hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300' },
+                    { key: 'casse' as const, label: 'Casse', color: 'hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300' },
+                    { key: 'bouchon' as const, label: 'Bouchon', color: 'hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300' },
+                    { key: 'correction' as const, label: 'Correction', color: 'hover:bg-sky-50 hover:text-sky-700 hover:border-sky-300' },
+                  ].map(btn => (
+                    <button
+                      key={btn.key}
+                      type="button"
+                      onClick={() => setReason(btn.key)}
+                      className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded-md border transition-all cursor-pointer ${
+                        reason === btn.key
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                          : `bg-slate-100 text-slate-600 border-slate-200 ${btn.color}`
+                      }`}
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
