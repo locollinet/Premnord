@@ -1083,9 +1083,39 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
         
         {Object.entries(domainGroups).map(([domainName, domainWines]) => (
           <div key={domainName} className="mb-4 pl-0.5 break-inside-avoid">
-            <h5 className="font-sans font-bold text-[#554039] text-[14.5px] sm:text-[15px] mb-1 tracking-tight">
-              {domainName}
-            </h5>
+            <div className="flex items-center justify-between mb-1">
+              <h5 className="font-sans font-bold text-[#554039] text-[14.5px] sm:text-[15px] tracking-tight">
+                {domainName}
+              </h5>
+              {editVisibilityMode && (
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const allHidden = domainWines.every(cw => cw.hideFromMenu);
+                    const newHidden = !allHidden;
+                    for (const cw of domainWines) {
+                      if (cw.wine75) await updateWine(cw.wine75.id, { hideFromMenu: newHidden }, 'edit');
+                      if (cw.wine150) await updateWine(cw.wine150.id, { hideFromMenu: newHidden }, 'edit');
+                    }
+                  }}
+                  className="px-2 py-0.5 rounded text-[10px] font-sans font-medium text-stone-500 hover:text-stone-900 hover:bg-stone-100 print:hidden transition-colors cursor-pointer flex items-center gap-1 border border-stone-200"
+                  title="Afficher ou masquer toutes les bouteilles de ce domaine en un clic"
+                >
+                  {domainWines.every(cw => cw.hideFromMenu) ? (
+                    <>
+                      <EyeOff className="w-3 h-3 text-rose-500" />
+                      <span className="text-rose-600 font-semibold">Tout masqué</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-3 h-3 text-emerald-600" />
+                      <span>Tout masquer</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
             <div className="space-y-0.5">
               {domainWines.map(renderWineLine)}
             </div>
@@ -1507,8 +1537,9 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     };
 
     const renderSubRegionGroupHtml = (subRegionName: string, winesList: CoupledWineReference[]) => {
-      if (!winesList || winesList.length === 0) return '';
-      const domainGroups = getWinesByDomain(winesList);
+      const visibleWines = winesList.filter(w => !w.hideFromMenu);
+      if (!visibleWines || visibleWines.length === 0) return '';
+      const domainGroups = getWinesByDomain(visibleWines);
 
       let groupHtml = `
         <div class="subregion-block">
@@ -1516,11 +1547,13 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
       `;
 
       Object.entries(domainGroups).forEach(([domainName, domainWines]) => {
+        const visibleDomainWines = domainWines.filter(w => !w.hideFromMenu);
+        if (visibleDomainWines.length === 0) return;
         groupHtml += `
           <div class="domain-block">
             <h5 class="domain-title">${domainName}</h5>
             <div class="wine-lines-list">
-              ${domainWines.map(renderWineLineHtml).join('')}
+              ${visibleDomainWines.map(renderWineLineHtml).join('')}
             </div>
           </div>
         `;
@@ -1530,9 +1563,9 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
       return groupHtml;
     };
 
-    const bWines = structuredData.dpr.blanc;
-    const rRoseWines = structuredData.dpr.rose;
-    const rRougeWines = structuredData.dpr.rouge;
+    const bWines = structuredData.dpr.blanc.filter(w => !w.hideFromMenu);
+    const rRoseWines = structuredData.dpr.rose.filter(w => !w.hideFromMenu);
+    const rRougeWines = structuredData.dpr.rouge.filter(w => !w.hideFromMenu);
 
     const effCategories = Object.keys(structuredData.bulle).sort((a, b) => 
       getRegionOrderIndex(a, EFFERVESCENCES_ORDER) - getRegionOrderIndex(b, EFFERVESCENCES_ORDER)
