@@ -278,7 +278,7 @@ function AppContent() {
               Extraction Comptable
             </button>
 
-            {/* Tab: Customer-facing Wine Menu with Replenishments */}
+            {/* Tab: Customer-facing Wine Menu (Livre de Cave officiel) */}
             <button
               onClick={() => setActiveTab('menu')}
               className={`h-10 px-4 rounded-xl flex items-center gap-2 font-bold text-xs transition-all cursor-pointer whitespace-nowrap uppercase font-mono ${
@@ -288,7 +288,7 @@ function AppContent() {
               }`}
             >
               <BookOpen className="w-4 h-4 shrink-0" />
-              La Carte des Vins (Dining)
+              La Carte des Vins (Livre de Cave)
             </button>
 
             {/* Tab: Mobile iPhone Inventory counts helper */}

@@ -456,7 +456,11 @@ const Watermark: React.FC<{
   );
 };
 
-export const WineMenuDocumentStyle: React.FC = () => {
+export interface WineMenuDocumentStyleProps {
+  onSelectWine?: (wine: Wine) => void;
+}
+
+export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ onSelectWine }) => {
   const { wines, sites, watermarkLogo, updateWatermarkLogo, updateWine } = useFirebase();
   const [filterMode, setFilterMode] = useState<'salle' | 'all'>('salle');
   const [stockFilterMode, setStockFilterMode] = useState<'in_stock' | 'all'>('in_stock');
@@ -826,9 +830,18 @@ export const WineMenuDocumentStyle: React.FC = () => {
     return (
       <div 
         key={cw.id} 
-        className={`py-1 font-serif text-[13px] border-b border-stone-100/30 break-inside-avoid transition-opacity ${
+        onClick={() => {
+          const target = cw.wine75 || cw.wine150;
+          if (target && onSelectWine && !editVisibilityMode) {
+            onSelectWine(target);
+          }
+        }}
+        className={`py-1 font-serif text-[13px] border-b border-stone-100/30 break-inside-avoid transition-all ${
+          onSelectWine && !editVisibilityMode ? 'cursor-pointer hover:bg-stone-50/80 rounded px-1 -mx-1' : ''
+        } ${
           cw.hideFromMenu ? 'opacity-40 bg-stone-100/60 rounded px-1' : ''
         }`}
+        title={onSelectWine && !editVisibilityMode ? "Cliquer pour voir la fiche détaillée du vin" : undefined}
       >
         <div className="flex items-baseline w-full justify-between gap-1">
           {/* Bouton œil Sommelier pour afficher/masquer en 1 clic (Écran uniquement) */}
@@ -960,10 +973,10 @@ export const WineMenuDocumentStyle: React.FC = () => {
   // Page 2: Table of Contents (Index)
   const renderTOCPage = () => {
     const dprCount = structuredData.dpr.blanc.length + structuredData.dpr.rose.length + structuredData.dpr.rouge.length;
-    const bulleCount = (Object.values(structuredData.bulle) as Wine[][]).reduce((sum, list) => sum + list.length, 0);
-    const blancCount = (Object.values(structuredData.blanc) as Wine[][]).reduce((sum, list) => sum + list.length, 0);
-    const roseCount = (Object.values(structuredData.rose) as Wine[][]).reduce((sum, list) => sum + list.length, 0);
-    const rougeCount = (Object.values(structuredData.rouge) as Wine[][]).reduce((sum, list) => sum + list.length, 0);
+    const bulleCount = (Object.values(structuredData.bulle) as CoupledWineReference[][]).reduce((sum, list) => sum + list.length, 0);
+    const blancCount = (Object.values(structuredData.blanc) as CoupledWineReference[][]).reduce((sum, list) => sum + list.length, 0);
+    const roseCount = (Object.values(structuredData.rose) as CoupledWineReference[][]).reduce((sum, list) => sum + list.length, 0);
+    const rougeCount = (Object.values(structuredData.rouge) as CoupledWineReference[][]).reduce((sum, list) => sum + list.length, 0);
 
     const indexItems = [
       { title: "Domaine Prieuré Roch", page: 3, count: dprCount, desc: "Monopoles & sélections de prestige" },
@@ -1053,7 +1066,7 @@ export const WineMenuDocumentStyle: React.FC = () => {
               Aucune référence du Domaine Prieuré Roch disponible actuellement.
             </p>
           ) : (
-            <div className="space-y-6 max-h-[175mm] overflow-y-auto scrollbar-thin scrollbar-thumb-stone-300 pr-1">
+            <div className="space-y-6 max-h-[175mm] overflow-y-auto print:max-h-none print:overflow-visible scrollbar-thin scrollbar-thumb-stone-300 pr-1">
               {/* Blancs */}
               {bWines.length > 0 && (
                 <div>
@@ -1129,7 +1142,7 @@ export const WineMenuDocumentStyle: React.FC = () => {
               Aucune référence effervescente disponible actuellement.
             </p>
           ) : (
-            <div className="space-y-4 max-h-[175mm] overflow-y-auto scrollbar-thin scrollbar-thumb-stone-300 pr-1">
+            <div className="space-y-4 max-h-[175mm] overflow-y-auto print:max-h-none print:overflow-visible scrollbar-thin scrollbar-thumb-stone-300 pr-1">
               {categories.map(catName => 
                 renderSubRegionGroup(catName, structuredData.bulle[catName])
               )}
@@ -1172,7 +1185,7 @@ export const WineMenuDocumentStyle: React.FC = () => {
               Aucune référence de vin blanc disponible actuellement.
             </p>
           ) : (
-            <div className="space-y-4 max-h-[175mm] overflow-y-auto scrollbar-thin scrollbar-thumb-stone-300 pr-1">
+            <div className="space-y-4 max-h-[175mm] overflow-y-auto print:max-h-none print:overflow-visible scrollbar-thin scrollbar-thumb-stone-300 pr-1">
               {categories.map(catName => 
                 renderSubRegionGroup(catName, structuredData.blanc[catName])
               )}
@@ -1215,7 +1228,7 @@ export const WineMenuDocumentStyle: React.FC = () => {
               Aucune référence de vin rosé disponible actuellement.
             </p>
           ) : (
-            <div className="space-y-4 max-h-[175mm] overflow-y-auto scrollbar-thin scrollbar-thumb-stone-300 pr-1">
+            <div className="space-y-4 max-h-[175mm] overflow-y-auto print:max-h-none print:overflow-visible scrollbar-thin scrollbar-thumb-stone-300 pr-1">
               {categories.map(catName => 
                 renderSubRegionGroup(catName, structuredData.rose[catName])
               )}
@@ -1258,7 +1271,7 @@ export const WineMenuDocumentStyle: React.FC = () => {
               Aucune référence de vin rouge disponible actuellement.
             </p>
           ) : (
-            <div className="space-y-4 max-h-[175mm] overflow-y-auto scrollbar-thin scrollbar-thumb-stone-300 pr-1">
+            <div className="space-y-4 max-h-[175mm] overflow-y-auto print:max-h-none print:overflow-visible scrollbar-thin scrollbar-thumb-stone-300 pr-1">
               {categories.map(catName => 
                 renderSubRegionGroup(catName, structuredData.rouge[catName])
               )}
@@ -1664,7 +1677,7 @@ export const WineMenuDocumentStyle: React.FC = () => {
             {/* Simulated A4 card container */}
             <div 
               id="printable-word-booklet"
-              className="bg-[#FCFBF7] text-stone-800 relative shadow-xl border border-stone-200 rounded-xl p-[7mm] sm:p-[16mm] aspect-auto sm:aspect-[1/1.414] min-h-[450px] sm:min-h-0 w-full max-w-[620px] overflow-visible sm:overflow-hidden flex flex-col justify-between"
+              className="bg-[#FCFBF7] text-stone-800 relative shadow-xl border border-stone-200 rounded-xl p-[7mm] sm:p-[16mm] aspect-auto sm:aspect-[1/1.414] min-h-[450px] sm:min-h-0 w-full max-w-[620px] overflow-visible sm:overflow-hidden print:overflow-visible flex flex-col justify-between"
             >
               {showWatermark && <Watermark logo={watermarkLogo} opacity={watermarkOpacity} scale={watermarkScale} />}
               {renderPageContent(activePage)}
@@ -1679,7 +1692,7 @@ export const WineMenuDocumentStyle: React.FC = () => {
             {[1, 2, 3, 4, 5, 6, 7].map((pageNum) => (
               <div 
                 key={pageNum}
-                className="book-page-print bg-[#FCFBF7] text-stone-800 relative shadow-xl border border-stone-200 rounded-xl p-[7mm] sm:p-[16mm] aspect-auto sm:aspect-[1/1.414] min-h-[450px] sm:min-h-0 w-full overflow-visible sm:overflow-hidden flex flex-col justify-between print:rounded-none print:shadow-none print:border-none print:py-[12mm] print:px-[15mm] print:w-[210mm] print:h-[297mm] print:bg-white"
+                className="book-page-print bg-[#FCFBF7] text-stone-800 relative shadow-xl border border-stone-200 rounded-xl p-[7mm] sm:p-[16mm] aspect-auto sm:aspect-[1/1.414] min-h-[450px] sm:min-h-0 w-full overflow-visible sm:overflow-hidden flex flex-col justify-between print:rounded-none print:shadow-none print:border-none print:py-[12mm] print:px-[15mm] print:w-[210mm] print:min-h-[297mm] print:h-auto print:overflow-visible print:break-after-page print:bg-white"
               >
                 {showWatermark && <Watermark logo={watermarkLogo} opacity={watermarkOpacity} scale={watermarkScale} />}
                 {renderPageContent(pageNum)}
