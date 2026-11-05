@@ -1184,10 +1184,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const sibling = allWines.find(w => w.siteId === siteId && isSameWineReference(w, baseWine));
       if (sibling) return sibling;
     }
+    const normMovName = normalizeWineString(mov.wineName || '');
+    const cleanMovName = normalizeWineString((mov.wineName || '').replace(/\s*\([^)]*\)\s*$/, ''));
     return allWines.find(
       w =>
         w.siteId === siteId &&
-        normalizeWineString(w.name) === normalizeWineString(mov.wineName) &&
+        (normalizeWineString(w.name) === normMovName ||
+         normalizeWineString(w.name) === cleanMovName ||
+         normalizeWineString(`${w.name} (${w.vintage || ''})`) === normMovName) &&
         (!mov.domain || normalizeWineString(w.domain) === normalizeWineString(mov.domain)) &&
         (!mov.vintage || normalizeWineString(w.vintage) === normalizeWineString(mov.vintage))
     );

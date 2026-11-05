@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Wine } from '../types';
+import { PremnordLogo } from './PremnordLogo';
 import { 
   Printer, 
   ChevronLeft, 
@@ -61,6 +62,147 @@ const isMagnum = (wine: Wine): boolean => {
     binLower.includes('mag')
   );
 };
+
+
+// Formatage haute fidélité des prix (conforme au document Word : pas de décimales nulles, espace insécable milliers)
+const formatDocPrice = (price?: number | null): string => {
+  if (price === undefined || price === null || isNaN(price) || price <= 0) return '';
+  const isInt = Number.isInteger(price);
+  const numStr = isInt ? Math.round(price).toString() : price.toFixed(2).replace('.', ',');
+  return `${numStr.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} €`;
+};
+
+// Formatage de l'appellation et de la cuvée entre guillemets doubles conformes au document Word
+const formatWineDisplayTitle = (name: string, cuvee?: string): string => {
+  let cleanName = (name || '').trim();
+  let cleanCuvee = (cuvee || '').trim();
+  
+  if (cleanCuvee) {
+    const cleanCuveeUnquoted = cleanCuvee.replace(/^["«]|["»]$/g, '').trim();
+    if (cleanName.toLowerCase().includes(cleanCuveeUnquoted.toLowerCase())) {
+      if (!cleanName.includes('"') && !cleanName.includes('«')) {
+        const regex = new RegExp(cleanCuveeUnquoted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        return cleanName.replace(regex, `"${cleanCuveeUnquoted}"`);
+      }
+      return cleanName;
+    }
+    return `${cleanName} "${cleanCuveeUnquoted}"`;
+  }
+  return cleanName;
+};
+
+// Sommaire officiel exhaustif extrait du document Word original (42 pages)
+interface TocSection {
+  title: string;
+  page: number;
+  targetPage: number;
+  subItems?: { name: string; page: number }[];
+}
+
+const OFFICIAL_TOC: TocSection[] = [
+  {
+    title: "Domaine Prieuré Roch",
+    page: 3,
+    targetPage: 3,
+    subItems: []
+  },
+  {
+    title: "Effervescences",
+    page: 6,
+    targetPage: 4,
+    subItems: [
+      { name: "Champagne", page: 6 },
+      { name: "Bourgogne", page: 7 },
+      { name: "Loire – Jura", page: 7 },
+      { name: "Savoie – Bugey", page: 8 },
+      { name: "Alsace – Moselle", page: 8 },
+      { name: "Sud-ouest", page: 8 },
+      { name: "Corse", page: 8 },
+      { name: "Espagne", page: 8 },
+      { name: "Portugal", page: 8 },
+      { name: "Italie", page: 9 },
+      { name: "Etats-Unis", page: 9 },
+      { name: "Co-fermentations", page: 9 },
+      { name: "Cidres et Poirés", page: 9 }
+    ]
+  },
+  {
+    title: "Vins Blancs",
+    page: 10,
+    targetPage: 5,
+    subItems: [
+      { name: "Bourgogne", page: 10 },
+      { name: "Beaujolais – Champagne – Jura", page: 15 },
+      { name: "Savoie et vignobles alpins", page: 16 },
+      { name: "Alsace", page: 17 },
+      { name: "Moselle – Auvergne – Loire", page: 18 },
+      { name: "Bordelais et Sud-Ouest", page: 20 },
+      { name: "Rhône", page: 20 },
+      { name: "Provence – Corse", page: 21 },
+      { name: "Languedoc et Roussillon", page: 22 },
+      { name: "Allemagne", page: 23 },
+      { name: "Suisse", page: 23 },
+      { name: "Autriche", page: 23 },
+      { name: "Italie", page: 23 },
+      { name: "Hongrie", page: 24 },
+      { name: "Espagne", page: 24 },
+      { name: "Portugal", page: 25 },
+      { name: "Slovénie", page: 25 },
+      { name: "Grèce", page: 25 },
+      { name: "Géorgie", page: 26 },
+      { name: "Etats-Unis", page: 26 },
+      { name: "Chili", page: 26 },
+      { name: "Argentine", page: 26 },
+      { name: "Afrique du Sud", page: 26 },
+      { name: "Australie – Nouvelle-Zélande", page: 27 },
+      { name: "Japon", page: 27 }
+    ]
+  },
+  {
+    title: "Vins Rosés",
+    page: 25,
+    targetPage: 6,
+    subItems: [
+      { name: "Bourgogne", page: 25 },
+      { name: "Rhône sud – Provence - Corse", page: 25 },
+      { name: "Espagne", page: 25 },
+      { name: "Bordelais", page: 25 },
+      { name: "Afrique du Sud", page: 25 }
+    ]
+  },
+  {
+    title: "Vins Rouges",
+    page: 26,
+    targetPage: 7,
+    subItems: [
+      { name: "Bourgogne", page: 26 },
+      { name: "Beaujolais", page: 30 },
+      { name: "Alsace – Moselle – Jura", page: 32 },
+      { name: "Bugey – Savoie – Isère", page: 33 },
+      { name: "Auvergne – Loire", page: 33 },
+      { name: "Sud-ouest et Bordelais", page: 35 },
+      { name: "Rhône nord", page: 36 },
+      { name: "Rhône sud", page: 37 },
+      { name: "Provence", page: 37 },
+      { name: "Corse – Languedoc – Roussillon", page: 38 },
+      { name: "Allemagne", page: 39 },
+      { name: "Danemark", page: 39 },
+      { name: "Suisse", page: 39 },
+      { name: "Autriche", page: 39 },
+      { name: "Italie", page: 39 },
+      { name: "Espagne", page: 40 },
+      { name: "Portugal", page: 40 },
+      { name: "Grèce", page: 41 },
+      { name: "Géorgie", page: 41 },
+      { name: "Etats-Unis", page: 41 },
+      { name: "Argentine", page: 41 },
+      { name: "Chili", page: 41 },
+      { name: "Afrique du Sud", page: 42 },
+      { name: "Australie – Nouvelle-Zélande", page: 42 },
+      { name: "Japon", page: 42 }
+    ]
+  }
+];
 
 // Canonical region order matching Premnord Livre de Cave PDF table of contents
 const EFFERVESCENCES_ORDER = [
@@ -396,7 +538,7 @@ const Watermark: React.FC<{
       ) : (
         <svg 
           viewBox="0 0 400 400" 
-          className="text-[#BD6346] fill-none stroke-current" 
+          className="text-[#A4513C] fill-none stroke-current" 
           strokeWidth="1.2"
           style={{ width: `${scale}%`, height: `${scale}%`, maxWidth: '500px', maxHeight: '500px' }}
         >
@@ -824,8 +966,9 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     const hasAsterisk = vintage.includes('*') || cleanNote.includes('*');
     const cleanVintage = (vintage || '').replace('*', '').trim();
 
-    const p75Str = cw.price75 ? `${cw.price75.toFixed(2).replace('.', ',')} €` : '';
-    const p150Str = cw.price150 ? `${cw.price150.toFixed(2).replace('.', ',')} €` : '';
+    const p75Str = formatDocPrice(cw.price75);
+    const p150Str = formatDocPrice(cw.price150);
+    const displayTitle = formatWineDisplayTitle(cw.name, cw.cuvee);
 
     return (
       <div 
@@ -836,7 +979,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             onSelectWine(target);
           }
         }}
-        className={`py-1 font-serif text-[13px] border-b border-stone-100/30 break-inside-avoid transition-all ${
+        className={`py-0.5 font-sans text-[12.5px] sm:text-[13px] text-[#334552] border-b border-stone-100/20 break-inside-avoid transition-all ${
           onSelectWine && !editVisibilityMode ? 'cursor-pointer hover:bg-stone-50/80 rounded px-1 -mx-1' : ''
         } ${
           cw.hideFromMenu ? 'opacity-40 bg-stone-100/60 rounded px-1' : ''
@@ -866,14 +1009,14 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           )}
 
           {/* 1. Colonne de Gauche : Millésime (ex: 2023, N.M, 2015*, S.A.) */}
-          <div className="w-14 sm:w-16 shrink-0 font-mono text-[12.5px] font-semibold text-stone-700 italic">
+          <div className="w-14 sm:w-16 shrink-0 font-mono text-[12px] sm:text-[12.5px] font-semibold text-[#334552]/80 italic">
             {cleanVintage}{hasAsterisk ? '*' : ''}
           </div>
 
           {/* 2. Colonne Centrale : Appellation & Cuvée (entre guillemets) */}
           <div className="flex items-baseline flex-grow min-w-0 pr-1 relative">
-            <span className="font-semibold text-stone-900 leading-snug">
-              {cw.name}
+            <span className="font-semibold text-[#334552] leading-snug">
+              {displayTitle}
             </span>
             {cleanNote && (
               <span className="ml-1.5 text-[10.5px] text-stone-400 font-sans italic">
@@ -882,7 +1025,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             )}
             {/* Badge de stock direct à l'écran si activé (masqué à l'impression PDF) */}
             {showStockBadges && (
-              <span className="ml-2 px-1.5 py-0.2 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[9.5px] font-mono font-bold print:hidden">
+              <span className="ml-2 px-1.5 py-0.2 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-mono font-bold print:hidden">
                 {cw.stock75 > 0 ? `${cw.stock75} bt (75)` : ''}
                 {cw.stock75 > 0 && cw.stock150 > 0 ? ' • ' : ''}
                 {cw.stock150 > 0 ? `${cw.stock150} mag (150)` : ''}
@@ -893,16 +1036,16 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
 
           {/* 3. Ligne pointillée décorative */}
           <div 
-            className="flex-grow border-b border-dotted border-stone-300 mx-2 self-baseline h-1.5 min-w-4" 
+            className="flex-grow border-b border-dotted border-stone-300 mx-2 self-baseline h-1.5 min-w-3" 
             style={{ transform: 'translateY(-2.5px)' }} 
           />
 
           {/* 4. Double colonne de prix alignée : 75 cl | 150 cl */}
           <div className="flex items-baseline gap-2 shrink-0 font-mono text-[13px]">
-            <span className="font-bold text-stone-900 w-16 text-right pr-1">
+            <span className="font-bold text-[#334552] w-16 text-right pr-1">
               {p75Str}
             </span>
-            <span className="font-bold text-stone-900 w-16 text-right pr-1">
+            <span className="font-bold text-[#334552] w-16 text-right pr-1">
               {p150Str}
             </span>
           </div>
@@ -918,20 +1061,15 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
 
     return (
       <div key={subRegionName} className="mb-6 break-inside-avoid">
-        <h4 className="text-[#BD6346] font-serif font-bold tracking-[0.15em] text-[12px] uppercase border-b border-stone-200 pb-0.5 mb-3 mt-4 text-center">
+        <h4 className="text-[#A4513C] font-sans font-bold tracking-[0.12em] text-[13px] uppercase border-b border-[#A4513C]/20 pb-0.5 mb-3 mt-4 text-center">
           {subRegionName}
         </h4>
         
         {Object.entries(domainGroups).map(([domainName, domainWines]) => (
-          <div key={domainName} className="mb-5 pl-0.5">
-            <h5 className="font-sans font-extrabold text-stone-900 text-base sm:text-[17px] mb-0.5 tracking-tight">
+          <div key={domainName} className="mb-4 pl-0.5">
+            <h5 className="font-sans font-bold text-[#554039] text-[15px] sm:text-[15.5px] mb-1 tracking-tight">
               {domainName}
             </h5>
-            {domainWines[0]?.appellation && (
-              <p className="text-[10px] text-stone-400 uppercase font-sans font-semibold tracking-wider mb-1.5">
-                {domainWines[0].appellation}
-              </p>
-            )}
             <div className="space-y-0.5">
               {domainWines.map(renderWineLine)}
             </div>
@@ -945,23 +1083,29 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
 
   // Page 1: Couverture (Cover Page)
   const renderCoverPage = () => (
-    <div className="flex flex-col justify-between items-center h-full text-center py-[25mm] relative z-10 select-none">
-      <div className="mt-10">
-        {/* Large Spaced out logo / header */}
-        <h1 className="text-[#BD6346] font-sans font-medium tracking-[0.45em] text-4xl sm:text-5xl uppercase ml-[0.45em]">
+    <div className="flex flex-col justify-between items-center h-full text-center py-[22mm] relative z-10 select-none">
+      <div className="mt-6 flex flex-col items-center">
+        {/* Blason / Logo officiel Premnord */}
+        <div className="mb-6">
+          <PremnordLogo size={56} color="#A4513C" />
+        </div>
+        <h1 className="text-[#A4513C] font-sans font-black tracking-[0.25em] text-4xl sm:text-5xl uppercase">
           PREMNORD
         </h1>
-        <div className="w-16 h-[1.5px] bg-[#BD6346]/40 mx-auto mt-6" />
-      </div>
-
-      <div className="flex flex-col items-center">
-        {/* Subtle decorative centerpiece */}
-        <h2 className="text-[#BD6346] font-sans font-light tracking-[0.3em] text-lg sm:text-xl uppercase ml-[0.3em] mt-2">
+        <div className="w-16 h-[2px] bg-[#A4513C]/40 mx-auto mt-4" />
+        <h2 className="text-[#A4513C] font-sans font-semibold tracking-[0.25em] text-lg sm:text-xl uppercase mt-4">
           LIVRE DE CAVE
         </h2>
       </div>
 
-      <div className="w-full max-w-sm space-y-4 px-6 text-[10px] font-sans tracking-[0.05em] uppercase text-stone-400">
+      <div className="flex flex-col items-center my-6">
+        <div className="w-12 h-[1px] bg-[#A4513C]/30 my-3" />
+        <p className="font-sans italic text-stone-400 text-xs tracking-wider">
+          Restaurant Premnord &bull; Bourgogne
+        </p>
+      </div>
+
+      <div className="w-full max-w-sm space-y-3 px-6 text-[10px] font-sans tracking-[0.05em] uppercase text-stone-400">
         <p className="font-medium text-stone-500">Prix nets, service compris</p>
         <p className="text-[8.5px] leading-relaxed max-w-xs mx-auto">
           L'abus d'alcool est dangereux pour la santé, à consommer avec modération
@@ -970,66 +1114,96 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     </div>
   );
 
-  // Page 2: Table of Contents (Index)
+  // Page 2: Table des Matières (Index officiel fidèle au document Word de l'oncle)
   const renderTOCPage = () => {
-    const dprCount = structuredData.dpr.blanc.length + structuredData.dpr.rose.length + structuredData.dpr.rouge.length;
-    const bulleCount = (Object.values(structuredData.bulle) as CoupledWineReference[][]).reduce((sum, list) => sum + list.length, 0);
-    const blancCount = (Object.values(structuredData.blanc) as CoupledWineReference[][]).reduce((sum, list) => sum + list.length, 0);
-    const roseCount = (Object.values(structuredData.rose) as CoupledWineReference[][]).reduce((sum, list) => sum + list.length, 0);
-    const rougeCount = (Object.values(structuredData.rouge) as CoupledWineReference[][]).reduce((sum, list) => sum + list.length, 0);
-
-    const indexItems = [
-      { title: "Domaine Prieuré Roch", page: 3, count: dprCount, desc: "Monopoles & sélections de prestige" },
-      { title: "Effervescences", page: 4, count: bulleCount, desc: "Champagnes de vignerons & grands crémants" },
-      { title: "Vins Blancs", page: 5, count: blancCount, desc: "Bourgogne, Loire, Jura & cépages de France et d'ailleurs" },
-      { title: "Vins Rosés", page: 6, count: roseCount, desc: "AOP de l'Est parisien aux rives méditerranéennes" },
-      { title: "Vins Rouges", page: 7, count: rougeCount, desc: "Grands terroirs, pinot noir et sélections fines" },
-    ];
+    const col1 = [OFFICIAL_TOC[0], OFFICIAL_TOC[1], OFFICIAL_TOC[2]];
+    const col2 = [OFFICIAL_TOC[3], OFFICIAL_TOC[4]];
 
     return (
-      <div className="flex flex-col justify-between h-full py-[10mm] relative z-10 px-[5mm]">
+      <div className="flex flex-col justify-between h-full py-[6mm] relative z-10 px-[3mm] sm:px-[5mm]">
         <div>
-          <h2 className="text-center text-[#BD6346] font-sans font-light tracking-[0.25em] text-2xl uppercase border-b border-stone-200/60 pb-4 mb-10">
-            INDEX DU LIVRE
+          <h2 className="text-center text-[#A4513C] font-sans font-black tracking-[0.25em] text-xl sm:text-2xl uppercase border-b border-[#A4513C]/20 pb-3 mb-5">
+            SOMMAIRE DU LIVRE DE CAVE
           </h2>
 
-          <div className="space-y-6 max-w-md mx-auto mt-8">
-            {indexItems.map((item) => (
-              <div 
-                key={item.page}
-                onClick={() => viewFormat === 'paginated' && setActivePage(item.page)}
-                className={`group flex items-baseline justify-between py-2 border-b border-stone-100 cursor-pointer ${
-                  viewFormat === 'paginated' ? 'hover:bg-stone-50/80 rounded px-2 transition-all' : ''
-                }`}
-              >
-                <div className="min-w-0 pr-4">
-                  <h3 className="font-sans font-bold text-stone-800 text-[13px] tracking-tight group-hover:text-[#BD6346] transition-colors">
-                    {item.title}
-                  </h3>
-                  <p className="text-[10px] text-stone-400 font-sans italic mt-0.5">{item.desc}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 max-w-2xl mx-auto">
+            {/* Colonne 1 : Domaine Prieuré Roch, Effervescences, Vins Blancs */}
+            <div className="space-y-4">
+              {col1.map((sec) => (
+                <div key={sec.title} className="space-y-1">
+                  <div
+                    onClick={() => viewFormat === 'paginated' && setActivePage(sec.targetPage)}
+                    className="flex items-baseline justify-between border-b border-[#A4513C]/20 pb-0.5 cursor-pointer group"
+                  >
+                    <h3 className="font-sans font-black text-[#A4513C] text-[12px] sm:text-[12.5px] uppercase tracking-wider group-hover:translate-x-0.5 transition-transform">
+                      {sec.title}
+                    </h3>
+                    <span className="font-mono text-[11px] font-bold text-[#A4513C]">
+                      p.{sec.page}
+                    </span>
+                  </div>
+                  {sec.subItems && sec.subItems.length > 0 && (
+                    <div className="space-y-0.5 pl-1.5 pt-0.5">
+                      {sec.subItems.map((sub) => (
+                        <div
+                          key={sub.name}
+                          onClick={() => viewFormat === 'paginated' && setActivePage(sec.targetPage)}
+                          className="flex items-baseline justify-between py-0.2 text-[10.5px] text-[#334552] hover:text-[#A4513C] cursor-pointer group transition-colors"
+                        >
+                          <span className="truncate pr-1 group-hover:font-medium">{sub.name}</span>
+                          <span className="flex-grow border-b border-dotted border-stone-300 mx-1 self-baseline h-1" />
+                          <span className="font-mono text-[9.5px] text-stone-500 font-semibold shrink-0">
+                            p.{sub.page}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="flex-grow border-b border-dotted border-stone-300 mx-2 self-baseline h-2" />
-                <div className="flex items-center gap-1.5 shrink-0 font-mono text-xs text-stone-500 font-bold">
-                  <span className="bg-stone-100 text-[9px] px-1.5 py-0.5 rounded text-stone-500 border border-stone-200">
-                    {item.count} réf.
-                  </span>
-                  <span className="text-[#BD6346] group-hover:translate-x-0.5 transition-transform">
-                    p.{item.page}
-                  </span>
+              ))}
+            </div>
+
+            {/* Colonne 2 : Vins Rosés, Vins Rouges */}
+            <div className="space-y-4">
+              {col2.map((sec) => (
+                <div key={sec.title} className="space-y-1">
+                  <div
+                    onClick={() => viewFormat === 'paginated' && setActivePage(sec.targetPage)}
+                    className="flex items-baseline justify-between border-b border-[#A4513C]/20 pb-0.5 cursor-pointer group"
+                  >
+                    <h3 className="font-sans font-black text-[#A4513C] text-[12px] sm:text-[12.5px] uppercase tracking-wider group-hover:translate-x-0.5 transition-transform">
+                      {sec.title}
+                    </h3>
+                    <span className="font-mono text-[11px] font-bold text-[#A4513C]">
+                      p.{sec.page}
+                    </span>
+                  </div>
+                  {sec.subItems && sec.subItems.length > 0 && (
+                    <div className="space-y-0.5 pl-1.5 pt-0.5">
+                      {sec.subItems.map((sub) => (
+                        <div
+                          key={sub.name}
+                          onClick={() => viewFormat === 'paginated' && setActivePage(sec.targetPage)}
+                          className="flex items-baseline justify-between py-0.2 text-[10.5px] text-[#334552] hover:text-[#A4513C] cursor-pointer group transition-colors"
+                        >
+                          <span className="truncate pr-1 group-hover:font-medium">{sub.name}</span>
+                          <span className="flex-grow border-b border-dotted border-stone-300 mx-1 self-baseline h-1" />
+                          <span className="font-mono text-[9.5px] text-stone-500 font-semibold shrink-0">
+                            p.{sub.page}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
-        <div>
-          {viewFormat === 'paginated' && (
-            <p className="text-center text-[9px] text-stone-400 font-sans italic mb-3 animate-pulse">💡 Cliquez sur une section pour y accéder directement.</p>
-          )}
-          <div className="flex justify-between items-baseline border-t border-stone-100 pt-2 font-sans text-[7.5px] sm:text-[8px] font-medium text-stone-400 uppercase tracking-wider">
-            <span className="truncate max-w-[75%]">L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
-            <span className="font-mono font-bold">p.2</span>
-          </div>
+        <div className="mt-3 pt-2 border-t border-stone-100 flex justify-between items-baseline font-sans text-[7.5px] sm:text-[8px] font-medium text-stone-400 uppercase tracking-wider">
+          <span className="truncate max-w-[75%]">L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
+          <span className="font-mono font-bold">p.2</span>
         </div>
       </div>
     );
@@ -1052,13 +1226,13 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           </div>
 
           <div className="text-center mb-8">
-            <h2 className="text-[#BD6346] font-sans font-medium tracking-[0.25em] text-xl sm:text-2xl uppercase leading-tight">
+            <h2 className="text-[#A4513C] font-sans font-medium tracking-[0.25em] text-xl sm:text-2xl uppercase leading-tight">
               DOMAINE PRIEURE ROCH
             </h2>
             <p className="text-stone-400 font-sans italic text-[11px] mt-1.5 tracking-wide">
               Par Henry-Frédéric Roch depuis 1988
             </p>
-            <div className="w-12 h-[1px] bg-[#BD6346]/30 mx-auto mt-4" />
+            <div className="w-12 h-[1px] bg-[#A4513C]/30 mx-auto mt-4" />
           </div>
 
           {totalDPRCount === 0 ? (
@@ -1070,8 +1244,8 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               {/* Blancs */}
               {bWines.length > 0 && (
                 <div>
-                  <h3 className="text-[#BD6346] font-sans font-bold tracking-[0.1em] text-[11px] uppercase border-b border-stone-200 pb-0.5 mb-2 italic">
-                    Les Blancs
+                  <h3 className="text-[#A4513C] font-sans font-bold tracking-[0.1em] text-[12px] uppercase border-b border-[#A4513C]/20 pb-0.5 mb-2 italic">
+                    Blancs
                   </h3>
                   <div className="space-y-0.5">
                     {bWines.map(renderWineLine)}
@@ -1082,8 +1256,8 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               {/* Rosés */}
               {rRoseWines.length > 0 && (
                 <div>
-                  <h3 className="text-[#BD6346] font-sans font-bold tracking-[0.1em] text-[11px] uppercase border-b border-stone-200 pb-0.5 mb-2 italic">
-                    Les Rosés
+                  <h3 className="text-[#A4513C] font-sans font-bold tracking-[0.1em] text-[12px] uppercase border-b border-[#A4513C]/20 pb-0.5 mb-2 italic">
+                    Rosés
                   </h3>
                   <div className="space-y-0.5">
                     {rRoseWines.map(renderWineLine)}
@@ -1094,8 +1268,8 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               {/* Rouges */}
               {rRougeWines.length > 0 && (
                 <div>
-                  <h3 className="text-[#BD6346] font-sans font-bold tracking-[0.1em] text-[11px] uppercase border-b border-stone-200 pb-0.5 mb-2 italic">
-                    Les Rouges
+                  <h3 className="text-[#A4513C] font-sans font-bold tracking-[0.1em] text-[12px] uppercase border-b border-[#A4513C]/20 pb-0.5 mb-2 italic">
+                    Rouges
                   </h3>
                   <div className="space-y-0.5">
                     {rRougeWines.map(renderWineLine)}
@@ -1131,10 +1305,10 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           </div>
 
           <div className="text-center mb-6">
-            <h2 className="text-[#BD6346] font-sans font-medium tracking-[0.25em] text-2xl uppercase">
+            <h2 className="text-[#A4513C] font-sans font-medium tracking-[0.25em] text-2xl uppercase">
               EFFERVESCENCES
             </h2>
-            <div className="w-10 h-[1px] bg-[#BD6346]/30 mx-auto mt-3" />
+            <div className="w-10 h-[1px] bg-[#A4513C]/30 mx-auto mt-3" />
           </div>
 
           {!hasAny ? (
@@ -1152,7 +1326,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
 
         <div className="flex justify-between items-baseline border-t border-stone-100 pt-2 mt-4 font-sans text-[7.5px] sm:text-[8px] font-medium text-stone-400 uppercase tracking-wider">
           <span className="truncate max-w-[75%]">L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
-          <span className="font-mono font-bold">p.4</span>
+          <span className="font-mono font-bold">p.6</span>
         </div>
       </div>
     );
@@ -1174,10 +1348,10 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           </div>
 
           <div className="text-center mb-6">
-            <h2 className="text-[#BD6346] font-sans font-medium tracking-[0.25em] text-2xl uppercase">
+            <h2 className="text-[#A4513C] font-sans font-medium tracking-[0.25em] text-2xl uppercase">
               VINS BLANCS
             </h2>
-            <div className="w-10 h-[1px] bg-[#BD6346]/30 mx-auto mt-3" />
+            <div className="w-10 h-[1px] bg-[#A4513C]/30 mx-auto mt-3" />
           </div>
 
           {!hasAny ? (
@@ -1195,7 +1369,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
 
         <div className="flex justify-between items-baseline border-t border-stone-100 pt-2 mt-4 font-sans text-[7.5px] sm:text-[8px] font-medium text-stone-400 uppercase tracking-wider">
           <span className="truncate max-w-[75%]">L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
-          <span className="font-mono font-bold">p.5</span>
+          <span className="font-mono font-bold">p.10</span>
         </div>
       </div>
     );
@@ -1217,10 +1391,10 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           </div>
 
           <div className="text-center mb-6">
-            <h2 className="text-[#BD6346] font-sans font-medium tracking-[0.25em] text-2xl uppercase">
+            <h2 className="text-[#A4513C] font-sans font-medium tracking-[0.25em] text-2xl uppercase">
               VINS ROSÉS
             </h2>
-            <div className="w-10 h-[1px] bg-[#BD6346]/30 mx-auto mt-3" />
+            <div className="w-10 h-[1px] bg-[#A4513C]/30 mx-auto mt-3" />
           </div>
 
           {!hasAny ? (
@@ -1238,7 +1412,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
 
         <div className="flex justify-between items-baseline border-t border-stone-100 pt-2 mt-4 font-sans text-[7.5px] sm:text-[8px] font-medium text-stone-400 uppercase tracking-wider">
           <span className="truncate max-w-[75%]">L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
-          <span className="font-mono font-bold">p.6</span>
+          <span className="font-mono font-bold">p.25</span>
         </div>
       </div>
     );
@@ -1260,10 +1434,10 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           </div>
 
           <div className="text-center mb-6">
-            <h2 className="text-[#BD6346] font-sans font-medium tracking-[0.25em] text-2xl uppercase">
+            <h2 className="text-[#A4513C] font-sans font-medium tracking-[0.25em] text-2xl uppercase">
               VINS ROUGES
             </h2>
-            <div className="w-10 h-[1px] bg-[#BD6346]/30 mx-auto mt-3" />
+            <div className="w-10 h-[1px] bg-[#A4513C]/30 mx-auto mt-3" />
           </div>
 
           {!hasAny ? (
@@ -1281,7 +1455,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
 
         <div className="flex justify-between items-baseline border-t border-stone-100 pt-2 mt-4 font-sans text-[7.5px] sm:text-[8px] font-medium text-stone-400 uppercase tracking-wider">
           <span className="truncate max-w-[75%]">L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
-          <span className="font-mono font-bold">p.7</span>
+          <span className="font-mono font-bold">p.26</span>
         </div>
       </div>
     );
@@ -1307,7 +1481,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
       <div className="lg:col-span-4 bg-white rounded-2xl border border-stone-200 p-6 space-y-6 shadow-sm print:hidden">
         <div>
           <h3 className="text-sm font-bold uppercase tracking-wider text-stone-800 flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-[#BD6346]" />
+            <Sliders className="w-4 h-4 text-[#A4513C]" />
             Mise en Page Livre de Cave
           </h3>
           <p className="text-[11px] text-stone-500 mt-1">
@@ -1322,7 +1496,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           <div className="flex items-center justify-between">
             <div>
               <p className="font-bold text-stone-900 text-xs flex items-center gap-1.5">
-                <Eye className="w-4 h-4 text-[#BD6346]" />
+                <Eye className="w-4 h-4 text-[#A4513C]" />
                 Mode Personnalisation
               </p>
               <p className="text-[10px] text-stone-500">Affiche l'œil pour masquer/afficher chaque vin</p>
@@ -1331,7 +1505,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               type="button"
               onClick={() => setEditVisibilityMode(!editVisibilityMode)}
               className={`w-11 h-6 rounded-full transition-all cursor-pointer relative p-1 ${
-                editVisibilityMode ? 'bg-[#BD6346]' : 'bg-stone-300'
+                editVisibilityMode ? 'bg-[#A4513C]' : 'bg-stone-300'
               }`}
             >
               <div className={`w-4 h-4 bg-white rounded-full transition-all shadow-sm ${
@@ -1369,7 +1543,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filtrer vin, cuvée, domaine..."
-            className="w-full h-10 bg-stone-50 border border-stone-200 focus:border-[#BD6346] rounded-xl px-3 text-xs text-stone-900 outline-none transition-all font-sans"
+            className="w-full h-10 bg-stone-50 border border-stone-200 focus:border-[#A4513C] rounded-xl px-3 text-xs text-stone-900 outline-none transition-all font-sans"
           />
         </div>
 
@@ -1473,7 +1647,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             <button
               onClick={() => setShowWatermark(!showWatermark)}
               className={`w-11 h-6 rounded-full transition-all cursor-pointer relative p-1 ${
-                showWatermark ? 'bg-[#BD6346]' : 'bg-stone-300'
+                showWatermark ? 'bg-[#A4513C]' : 'bg-stone-300'
               }`}
             >
               <div className={`w-4 h-4 bg-white rounded-full transition-all shadow-sm ${
@@ -1489,7 +1663,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
                 onClick={() => watermarkInputRef.current?.click()}
-                className="border-2 border-dashed border-stone-200 hover:border-[#BD6346]/40 rounded-lg p-3 text-center bg-white cursor-pointer transition-colors space-y-1"
+                className="border-2 border-dashed border-stone-200 hover:border-[#A4513C]/40 rounded-lg p-3 text-center bg-white cursor-pointer transition-colors space-y-1"
               >
                 <input 
                   type="file" 
@@ -1514,7 +1688,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               {watermarkLogo && (
                 <button
                   onClick={handleResetWatermark}
-                  className="w-full py-1.5 px-2 border border-stone-200 rounded text-[10px] text-stone-500 hover:text-[#BD6346] hover:bg-stone-100 transition-all flex items-center justify-center gap-1 cursor-pointer font-sans"
+                  className="w-full py-1.5 px-2 border border-stone-200 rounded text-[10px] text-stone-500 hover:text-[#A4513C] hover:bg-stone-100 transition-all flex items-center justify-center gap-1 cursor-pointer font-sans"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Restaurer le compas d'origine
@@ -1525,7 +1699,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               <div className="space-y-1">
                 <div className="flex justify-between text-stone-500 text-[10px]">
                   <span>Opacité / Transparence</span>
-                  <span className="font-mono font-bold text-[#BD6346]">{Math.round(watermarkOpacity * 100)}%</span>
+                  <span className="font-mono font-bold text-[#A4513C]">{Math.round(watermarkOpacity * 100)}%</span>
                 </div>
                 <input 
                   type="range"
@@ -1534,7 +1708,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
                   step="0.005"
                   value={watermarkOpacity}
                   onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
-                  className="w-full accent-[#BD6346] h-1 bg-stone-200 rounded-lg cursor-pointer"
+                  className="w-full accent-[#A4513C] h-1 bg-stone-200 rounded-lg cursor-pointer"
                 />
               </div>
 
@@ -1542,7 +1716,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               <div className="space-y-1">
                 <div className="flex justify-between text-stone-500 text-[10px]">
                   <span>Taille / Échelle</span>
-                  <span className="font-mono font-bold text-[#BD6346]">{watermarkScale}%</span>
+                  <span className="font-mono font-bold text-[#A4513C]">{watermarkScale}%</span>
                 </div>
                 <input 
                   type="range"
@@ -1551,7 +1725,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
                   step="5"
                   value={watermarkScale}
                   onChange={(e) => setWatermarkScale(parseInt(e.target.value))}
-                  className="w-full accent-[#BD6346] h-1 bg-stone-200 rounded-lg cursor-pointer"
+                  className="w-full accent-[#A4513C] h-1 bg-stone-200 rounded-lg cursor-pointer"
                 />
               </div>
             </div>
@@ -1573,7 +1747,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             <div className="bg-white/80 rounded-lg p-2.5 border border-amber-100 text-[10.5px] text-stone-700 space-y-1">
               <p className="font-semibold text-stone-850">Pour imprimer ou exporter en PDF sans aucun blocage :</p>
               <ol className="list-decimal list-inside pl-1 space-y-1 text-stone-600">
-                <li>Cliquez sur le bouton <span className="font-bold text-[#BD6346]">"Ouvrir dans un nouvel onglet"</span> (icône <span className="inline-block scale-95 align-middle">↗️</span> en haut à droite de l'aperçu AI Studio).</li>
+                <li>Cliquez sur le bouton <span className="font-bold text-[#A4513C]">"Ouvrir dans un nouvel onglet"</span> (icône <span className="inline-block scale-95 align-middle">↗️</span> en haut à droite de l'aperçu AI Studio).</li>
                 <li>Puis, sur le nouvel onglet, cliquez sur le bouton <span className="font-bold text-stone-800">"Imprimer / Exporter PDF"</span> ci-dessous pour lancer l'impression instantanément !</li>
               </ol>
             </div>
@@ -1588,7 +1762,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               window.print();
             }, 180);
           }}
-          className="w-full h-11 bg-[#BD6346] hover:bg-[#BD6346]/90 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow transition-all cursor-pointer uppercase tracking-wider font-sans"
+          className="w-full h-11 bg-[#A4513C] hover:bg-[#A4513C]/90 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow transition-all cursor-pointer uppercase tracking-wider font-sans"
         >
           <Printer className="w-4 h-4" />
           Imprimer / Exporter PDF
@@ -1631,19 +1805,19 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             }
             .book-page-print {
               page-break-after: always !important;
-              page-break-inside: avoid !important;
               break-after: page !important;
-              break-inside: avoid !important;
-              height: 297mm !important;
+              min-height: 297mm !important;
+              height: auto !important;
               width: 210mm !important;
-              padding: 12mm 15mm !important;
-              background: #FCFBF7 !important;
+              padding: 15mm 20mm !important;
+              background: #FFFFFF !important;
               position: relative !important;
               box-shadow: none !important;
               border: none !important;
               display: flex !important;
               flex-direction: column !important;
               justify-content: space-between !important;
+              overflow: visible !important;
             }
           }
         `}</style>
@@ -1661,8 +1835,8 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
                 <ChevronLeft className="w-4.5 h-4.5" />
               </button>
               
-              <span className="font-sans font-bold text-[11px] uppercase tracking-wider text-stone-500">
-                {activePage === 1 ? 'Couverture' : activePage === 2 ? 'Table des Matières' : `Page ${activePage} sur 7`}
+              <span className="font-sans font-bold text-[11px] uppercase tracking-wider text-stone-600">
+                {activePage === 1 ? '1 • Couverture' : activePage === 2 ? '2 • Sommaire du Livre' : activePage === 3 ? '3 • Domaine Prieuré Roch' : activePage === 4 ? '6 • Effervescences' : activePage === 5 ? '10 • Vins Blancs' : activePage === 6 ? '25 • Vins Rosés' : '26 • Vins Rouges'}
               </span>
 
               <button
