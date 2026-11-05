@@ -589,22 +589,31 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           </p>
         </div>
 
-        {/* Bouton d'exportation / impression A4 */}
+        {/* Boutons d'exportation (PDF & Word .docx) */}
         <div className="space-y-2">
           <button
             type="button"
             onClick={handlePrint}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#A4513C] hover:bg-[#8D4432] text-white font-semibold text-xs transition-colors shadow-sm"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#A4513C] hover:bg-[#8D4432] text-white font-semibold text-xs transition-colors shadow-sm cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>Imprimer / Exporter en PDF (A4)</span>
           </button>
 
+          <a
+            href="/carte_vins_premnord.docx"
+            download="carte_vins_premnord_officielle.docx"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-[#334552] font-semibold text-xs transition-colors border border-stone-200/80 shadow-xs cursor-pointer"
+          >
+            <FileText className="w-4 h-4 text-[#A4513C]" />
+            <span>Exporter en Word (.docx)</span>
+          </a>
+
           {isInIframe && (
             <button
               type="button"
               onClick={() => window.open(window.location.href, '_blank')}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11px] transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11px] transition-colors cursor-pointer"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               <span>Ouvrir en plein écran pour impression</span>
