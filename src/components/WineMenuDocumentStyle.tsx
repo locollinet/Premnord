@@ -457,8 +457,12 @@ const Watermark: React.FC<{
 };
 
 export const WineMenuDocumentStyle: React.FC = () => {
-  const { wines, sites, watermarkLogo, updateWatermarkLogo } = useFirebase();
+  const { wines, sites, watermarkLogo, updateWatermarkLogo, updateWine } = useFirebase();
   const [filterMode, setFilterMode] = useState<'salle' | 'all'>('salle');
+  const [stockFilterMode, setStockFilterMode] = useState<'in_stock' | 'all'>('in_stock');
+  const [editVisibilityMode, setEditVisibilityMode] = useState<boolean>(false);
+  const [showStockBadges, setShowStockBadges] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewFormat, setViewFormat] = useState<'paginated' | 'printall'>('paginated');
   const [activePage, setActivePage] = useState<number>(1);
   const [showWatermark, setShowWatermark] = useState<boolean>(true);
@@ -592,106 +596,198 @@ export const WineMenuDocumentStyle: React.FC = () => {
     }
   };
 
-  // Filter & consolidate wines across Sites 1, 2, 3, 4
-  const filteredWines = useMemo(() => {
-    const consolidatedMap = new Map<string, Wine>();
+  // 1. Structure d'une référence couplée 75cl / 150cl (Magnum) conforme au Livre de Cave fait main
+  interface CoupledWineReference {
+    id: string;
+    name: string;
+    domain: string;
+    appellation?: string;
+    cuvee?: string;
+    vintage: string;
+    color: string;
+    notes?: string;
+    wine75?: Wine;
+    wine150?: Wine;
+    price75?: number;
+    price150?: number;
+    stock75: number;
+    stock150: number;
+    totalStock: number;
+    hideFromMenu: boolean;
+    isPreSale: boolean;
+    region: string;
+    subRegion?: string;
+  }
+
+  // 2. Consolidation & Couplage 75cl / 150cl depuis l'inventaire en direct
+  const coupledWines = useMemo<CoupledWineReference[]>(() => {
+    const map = new Map<string, CoupledWineReference>();
 
     wines.forEach(w => {
-      if (w.siteId && !['site-1', 'site-2', 'site-3', 'site-4'].includes(w.siteId)) return;
-      if (w.hideFromMenu) return;
+      // Périmètre de site : Salle (Sites 1 à 4) ou Cave Entière
+      if (filterMode === 'salle' && w.siteId && !['site-1', 'site-2', 'site-3', 'site-4'].includes(w.siteId)) {
+        return;
+      }
 
-      const normDomain = getCanonicalDomain(w.domain).toLowerCase();
-      const normName = (w.name || '').trim().toLowerCase();
-      const normVintage = (w.vintage || '').toString().trim().toLowerCase();
-      const normColor = (w.color || '').toString().trim().toLowerCase();
-      const normFormat = (w.format || '').toString().trim().toLowerCase();
+      const domain = getCanonicalDomain(w.domain);
+      const color = w.color || 'blanc';
+      const vintage = (w.vintage || 'S.A.').toString().trim();
+      const isMag = isMagnum(w) || (w.format || '').toLowerCase().includes('150') || (w.format || '').toLowerCase().includes('mag');
 
-      const key = `${normDomain}_${normName}_${normVintage}_${normColor}_${normFormat}`;
+      // Nettoie la mention (Magnum) ou (150cl) dans le nom pour coupler avec la bouteille 75cl
+      const cleanName = (w.name || '')
+        .replace(/\s*\((?:150cl|150\s*cl|magnum|mag|1\.5l|1,5l)\)/gi, '')
+        .replace(/\s*–\s*magnum/gi, '')
+        .replace(/\s*-\s*magnum/gi, '')
+        .trim();
 
-      if (!consolidatedMap.has(key)) {
-        consolidatedMap.set(key, { ...w });
+      const key = `${domain.toLowerCase()}_${cleanName.toLowerCase()}_${vintage.toLowerCase()}_${color}`;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          id: w.id,
+          name: cleanName || w.name,
+          domain,
+          appellation: w.appellation,
+          cuvee: w.cuvee,
+          vintage,
+          color,
+          notes: w.notes,
+          wine75: isMag ? undefined : w,
+          wine150: isMag ? w : undefined,
+          price75: isMag ? undefined : w.priceSell,
+          price150: isMag ? w.priceSell : undefined,
+          stock75: isMag ? 0 : (w.quantity || 0),
+          stock150: isMag ? (w.quantity || 0) : 0,
+          totalStock: w.quantity || 0,
+          hideFromMenu: !!w.hideFromMenu,
+          isPreSale: !!w.isPreSale,
+          region: w.region || '',
+          subRegion: w.subRegion || ''
+        });
       } else {
-        const existing = consolidatedMap.get(key)!;
-        existing.quantity = (existing.quantity || 0) + (w.quantity || 0);
-        if (w.isPreSale) existing.isPreSale = true;
+        const entry = map.get(key)!;
+        if (isMag) {
+          if (!entry.wine150) {
+            entry.wine150 = w;
+            entry.price150 = w.priceSell;
+          } else if (w.priceSell && !entry.price150) {
+            entry.price150 = w.priceSell;
+          }
+          entry.stock150 += (w.quantity || 0);
+        } else {
+          if (!entry.wine75) {
+            entry.wine75 = w;
+            entry.price75 = w.priceSell;
+          } else if (w.priceSell && !entry.price75) {
+            entry.price75 = w.priceSell;
+          }
+          entry.stock75 += (w.quantity || 0);
+        }
+        entry.totalStock += (w.quantity || 0);
+        if (w.isPreSale) entry.isPreSale = true;
+        // Si l'un des formats est affiché, la référence est considérée active
+        if (!w.hideFromMenu) entry.hideFromMenu = false;
       }
     });
 
-    const list = Array.from(consolidatedMap.values());
-    if (filterMode === 'salle') {
-      return list.filter(w => w.quantity > 0 || w.isPreSale);
-    }
-    return list;
+    return Array.from(map.values());
   }, [wines, filterMode]);
 
-  // Group wines by canonical classification
+  // 3. Filtrage dynamique selon le stock et les préférences Sommelier (Afficher / Masquer)
+  const filteredWines = useMemo<CoupledWineReference[]>(() => {
+    return coupledWines.filter(cw => {
+      // Masquer les références désactivées (sauf en mode édition où le sommelier peut les réactiver)
+      if (cw.hideFromMenu && !editVisibilityMode) return false;
+
+      // Filtre de stock
+      if (stockFilterMode === 'in_stock') {
+        if (cw.totalStock <= 0 && !cw.isPreSale) return false;
+      }
+
+      // Recherche libre si saisie dans le menu
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          cw.name.toLowerCase().includes(q) ||
+          cw.domain.toLowerCase().includes(q) ||
+          (cw.appellation || '').toLowerCase().includes(q) ||
+          cw.vintage.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+
+      return true;
+    });
+  }, [coupledWines, editVisibilityMode, stockFilterMode, searchQuery]);
+
+  // 4. Regroupement par classification canonique pour le Livre de Cave
   const structuredData = useMemo(() => {
     const data = {
       dpr: {
-        blanc: [] as Wine[],
-        rose: [] as Wine[],
-        rouge: [] as Wine[],
+        blanc: [] as CoupledWineReference[],
+        rose: [] as CoupledWineReference[],
+        rouge: [] as CoupledWineReference[],
       },
-      bulle: {} as { [region: string]: Wine[] },
-      blanc: {} as { [region: string]: Wine[] },
-      rose: {} as { [region: string]: Wine[] },
-      rouge: {} as { [region: string]: Wine[] },
+      bulle: {} as { [region: string]: CoupledWineReference[] },
+      blanc: {} as { [region: string]: CoupledWineReference[] },
+      rose: {} as { [region: string]: CoupledWineReference[] },
+      rouge: {} as { [region: string]: CoupledWineReference[] },
     };
 
-    filteredWines.forEach(wine => {
-      const isDPR = getCanonicalDomain(wine.domain) === 'Domaine Prieuré-Roch';
-      const color = wine.color || 'blanc';
+    filteredWines.forEach(cw => {
+      const isDPR = getCanonicalDomain(cw.domain) === 'Domaine Prieuré-Roch';
+      const color = cw.color || 'blanc';
+      // Objet vin simplifié pour classification régionale
+      const wineForClass = (cw.wine75 || cw.wine150 || {
+        name: cw.name,
+        domain: cw.domain,
+        appellation: cw.appellation,
+        region: cw.region,
+        subRegion: cw.subRegion,
+        color: cw.color
+      }) as Wine;
 
       if (isDPR) {
         if (color === 'rose') {
-          data.dpr.rose.push(wine);
-        } else if (color === 'bulle') {
-          // Put bubbles under blancs or bubble
-          data.dpr.blanc.push(wine);
+          data.dpr.rose.push(cw);
         } else if (color === 'rouge') {
-          data.dpr.rouge.push(wine);
+          data.dpr.rouge.push(cw);
         } else {
-          data.dpr.blanc.push(wine);
+          data.dpr.blanc.push(cw);
         }
       } else {
-        // General wines
         if (color === 'bulle' || color === 'cidre_biere') {
-          const reg = classifyWineRegion(wine, 'bulle');
+          const reg = classifyWineRegion(wineForClass, 'bulle');
           if (!data.bulle[reg]) data.bulle[reg] = [];
-          data.bulle[reg].push(wine);
+          data.bulle[reg].push(cw);
         } else if (color === 'rose') {
-          const reg = classifyWineRegion(wine, 'rose');
+          const reg = classifyWineRegion(wineForClass, 'rose');
           if (!data.rose[reg]) data.rose[reg] = [];
-          data.rose[reg].push(wine);
+          data.rose[reg].push(cw);
         } else if (color === 'rouge') {
-          const reg = classifyWineRegion(wine, 'rouge');
+          const reg = classifyWineRegion(wineForClass, 'rouge');
           if (!data.rouge[reg]) data.rouge[reg] = [];
-          data.rouge[reg].push(wine);
+          data.rouge[reg].push(cw);
         } else {
-          // Blancs & orange
-          const reg = classifyWineRegion(wine, 'blanc');
+          const reg = classifyWineRegion(wineForClass, 'blanc');
           if (!data.blanc[reg]) data.blanc[reg] = [];
-          data.blanc[reg].push(wine);
+          data.blanc[reg].push(cw);
         }
       }
     });
 
-    // Sort wines inside groups (by name and descending vintage)
-    const sortWines = (a: Wine, b: Wine) => {
-      const nameCompare = (a.name || '').localeCompare(b.name || '', 'fr', { sensitivity: 'base' });
-      if (nameCompare !== 0) return nameCompare;
-
+    const sortWines = (a: CoupledWineReference, b: CoupledWineReference) => {
       const yearA = parseInt(a.vintage || '0') || 0;
       const yearB = parseInt(b.vintage || '0') || 0;
-      if (yearA !== yearB) return yearB - yearA; // Newest vintage first
-      return 0;
+      if (yearA !== yearB) return yearB - yearA;
+      return (a.name || '').localeCompare(b.name || '', 'fr', { sensitivity: 'base' });
     };
 
     data.dpr.blanc.sort(sortWines);
     data.dpr.rose.sort(sortWines);
     data.dpr.rouge.sort(sortWines);
 
-    const sortSubRegions = (obj: { [key: string]: Wine[] }) => {
+    const sortSubRegions = (obj: { [key: string]: CoupledWineReference[] }) => {
       Object.keys(obj).forEach(key => {
         obj[key].sort(sortWines);
       });
@@ -705,72 +801,96 @@ export const WineMenuDocumentStyle: React.FC = () => {
     return data;
   }, [filteredWines]);
 
-  // Helper to group sub-region wines by Domain
-  const getWinesByDomain = (winesList: Wine[]) => {
-    const groups: { [domain: string]: Wine[] } = {};
-    winesList.forEach(w => {
-      const dom = w.domain?.trim() || 'Domaine Inconnu';
+  // Regroupement des références couplées par Domaine
+  const getWinesByDomain = (winesList: CoupledWineReference[]) => {
+    const groups: { [domain: string]: CoupledWineReference[] } = {};
+    winesList.forEach(cw => {
+      const dom = cw.domain?.trim() || 'Domaine Inconnu';
       if (!groups[dom]) groups[dom] = [];
-      groups[dom].push(w);
+      groups[dom].push(cw);
     });
     return groups;
   };
 
-  const formatPeressTypeTag = (wine: Wine) => {
-    const colorStr = wine.color ? (wine.color.charAt(0).toUpperCase() + wine.color.slice(1).toLowerCase()) : '';
-    let formatStr = wine.format || 'Bouteille (75cl)';
-    const lowerFormat = formatStr.toLowerCase();
-    if (lowerFormat === '75cl' || lowerFormat === '75 cl' || lowerFormat === 'bouteille') {
-      formatStr = 'Bouteille (75cl)';
-    } else if (lowerFormat === '150cl' || lowerFormat === '150 cl' || lowerFormat === 'magnum') {
-      formatStr = 'Magnum (1.5L)';
-    } else if (lowerFormat === 'jeroboam' || lowerFormat === 'jéroboam' || lowerFormat === '300cl' || lowerFormat === '3l') {
-      formatStr = 'Jéroboam (3L)';
-    } else if (lowerFormat === 'demi-bouteille' || lowerFormat === '37.5cl' || lowerFormat === '37,5cl') {
-      formatStr = 'Demi-bouteille (37.5cl)';
-    }
-    if (colorStr && formatStr) {
-      return `(${colorStr} - ${formatStr})`;
-    }
-    return colorStr ? `(${colorStr})` : `(${formatStr})`;
-  };
-
-  const renderWineLine = (wine: Wine) => {
-    const vintage = wine.vintage || 'S.A.';
-    const cleanNote = getCleanSommelierNote(wine.notes);
+  // Rendu exact d'une ligne de vin conforme au Livre de Cave de l'Oncle :
+  // [Millésime à gauche] [Appellation & "Cuvée"] [Prix 75cl] [Prix 150cl (Magnum)]
+  const renderWineLine = (cw: CoupledWineReference) => {
+    const vintage = cw.vintage || 'S.A.';
+    const cleanNote = getCleanSommelierNote(cw.notes);
     const hasAsterisk = vintage.includes('*') || cleanNote.includes('*');
     const cleanVintage = (vintage || '').replace('*', '').trim();
-    const typeTag = formatPeressTypeTag(wine);
+
+    const p75Str = cw.price75 ? `${cw.price75.toFixed(2).replace('.', ',')} €` : '';
+    const p150Str = cw.price150 ? `${cw.price150.toFixed(2).replace('.', ',')} €` : '';
 
     return (
-      <div key={wine.id} className="py-1 font-serif text-[13px] border-b border-stone-100/30 break-inside-avoid">
+      <div 
+        key={cw.id} 
+        className={`py-1 font-serif text-[13px] border-b border-stone-100/30 break-inside-avoid transition-opacity ${
+          cw.hideFromMenu ? 'opacity-40 bg-stone-100/60 rounded px-1' : ''
+        }`}
+      >
         <div className="flex items-baseline w-full justify-between gap-1">
+          {/* Bouton œil Sommelier pour afficher/masquer en 1 clic (Écran uniquement) */}
+          {editVisibilityMode && (
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                const newHidden = !cw.hideFromMenu;
+                if (cw.wine75) await updateWine(cw.wine75.id, { hideFromMenu: newHidden }, 'edit');
+                if (cw.wine150) await updateWine(cw.wine150.id, { hideFromMenu: newHidden }, 'edit');
+              }}
+              className="mr-2 p-1 text-stone-400 hover:text-stone-900 rounded print:hidden transition-colors cursor-pointer shrink-0"
+              title={cw.hideFromMenu ? "Afficher sur la carte" : "Masquer de la carte"}
+            >
+              {cw.hideFromMenu ? (
+                <EyeOff className="w-3.5 h-3.5 text-rose-500" />
+              ) : (
+                <Eye className="w-3.5 h-3.5 text-emerald-600" />
+              )}
+            </button>
+          )}
+
+          {/* 1. Colonne de Gauche : Millésime (ex: 2023, N.M, 2015*, S.A.) */}
+          <div className="w-14 sm:w-16 shrink-0 font-mono text-[12.5px] font-semibold text-stone-700 italic">
+            {cleanVintage}{hasAsterisk ? '*' : ''}
+          </div>
+
+          {/* 2. Colonne Centrale : Appellation & Cuvée (entre guillemets) */}
           <div className="flex items-baseline flex-grow min-w-0 pr-1 relative">
-            {/* Wine Name */}
             <span className="font-semibold text-stone-900 leading-snug">
-              {wine.name}
-            </span>
-            {/* Format/Color tag in italics matching La Cave des Peress */}
-            <span className="ml-1.5 text-[11px] text-stone-500 font-sans italic shrink-0">
-              {typeTag}
+              {cw.name}
             </span>
             {cleanNote && (
-              <span className="ml-1 text-[10.5px] text-stone-400 font-sans italic">
+              <span className="ml-1.5 text-[10.5px] text-stone-400 font-sans italic">
                 {cleanNote.startsWith('Dgt') ? ` – ${cleanNote}` : ` (${cleanNote})`}
+              </span>
+            )}
+            {/* Badge de stock direct à l'écran si activé (masqué à l'impression PDF) */}
+            {showStockBadges && (
+              <span className="ml-2 px-1.5 py-0.2 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[9.5px] font-mono font-bold print:hidden">
+                {cw.stock75 > 0 ? `${cw.stock75} bt (75)` : ''}
+                {cw.stock75 > 0 && cw.stock150 > 0 ? ' • ' : ''}
+                {cw.stock150 > 0 ? `${cw.stock150} mag (150)` : ''}
+                {cw.totalStock === 0 ? '0 bt (Rupture)' : ''}
               </span>
             )}
           </div>
 
-          {/* Dotted lines */}
-          <div className="flex-grow border-b border-dotted border-stone-300 mx-2 self-baseline h-1.5 min-w-6" style={{ transform: 'translateY(-2.5px)' }} />
+          {/* 3. Ligne pointillée décorative */}
+          <div 
+            className="flex-grow border-b border-dotted border-stone-300 mx-2 self-baseline h-1.5 min-w-4" 
+            style={{ transform: 'translateY(-2.5px)' }} 
+          />
 
-          {/* Vintage & Price */}
-          <div className="flex items-baseline gap-4 shrink-0 text-right font-mono text-[13px]">
-            <span className="text-stone-600 font-semibold italic text-[12.5px] min-w-10 text-center">
-              {cleanVintage}{hasAsterisk ? '*' : ''}
+          {/* 4. Double colonne de prix alignée : 75 cl | 150 cl */}
+          <div className="flex items-baseline gap-2 shrink-0 font-mono text-[13px]">
+            <span className="font-bold text-stone-900 w-16 text-right pr-1">
+              {p75Str}
             </span>
-            <span className="font-bold text-stone-900 min-w-16 text-right">
-              {wine.priceSell ? `${wine.priceSell.toFixed(2).replace('.', ',')} €` : 'N/C'}
+            <span className="font-bold text-stone-900 w-16 text-right pr-1">
+              {p150Str}
             </span>
           </div>
         </div>
@@ -778,8 +898,8 @@ export const WineMenuDocumentStyle: React.FC = () => {
     );
   };
 
-  // Helper to render a group of wines with domain titles
-  const renderSubRegionGroup = (subRegionName: string, winesList: Wine[]) => {
+  // Helper pour afficher un groupe de sous-région avec les titres de Domaines
+  const renderSubRegionGroup = (subRegionName: string, winesList: CoupledWineReference[]) => {
     if (!winesList || winesList.length === 0) return null;
     const domainGroups = getWinesByDomain(winesList);
 
@@ -791,7 +911,6 @@ export const WineMenuDocumentStyle: React.FC = () => {
         
         {Object.entries(domainGroups).map(([domainName, domainWines]) => (
           <div key={domainName} className="mb-5 pl-0.5">
-            {/* Producer Title - Prominent & Bold matching La Cave des Peress */}
             <h5 className="font-sans font-extrabold text-stone-900 text-base sm:text-[17px] mb-0.5 tracking-tight">
               {domainName}
             </h5>
@@ -914,9 +1033,9 @@ export const WineMenuDocumentStyle: React.FC = () => {
       <div className="flex flex-col justify-between h-full relative z-10 px-[5mm] py-[5mm]">
         <div>
           {/* Header column size reference */}
-          <div className="flex justify-end font-sans uppercase tracking-widest text-[9px] font-bold text-stone-400 border-b border-stone-100 pb-1 mb-4">
-            <span className="w-16 text-center">75 cl</span>
-            <span className="w-16 text-right">150 cl</span>
+          <div className="flex justify-end font-mono uppercase tracking-widest text-[9.5px] font-bold text-stone-400 border-b border-stone-100 pb-1 mb-4 gap-2">
+            <span className="w-16 text-right pr-1">75 cl</span>
+            <span className="w-16 text-right pr-1">150 cl</span>
           </div>
 
           <div className="text-center mb-8">
@@ -993,9 +1112,9 @@ export const WineMenuDocumentStyle: React.FC = () => {
     return (
       <div className="flex flex-col justify-between h-full relative z-10 px-[5mm] py-[5mm]">
         <div>
-          <div className="flex justify-end font-sans uppercase tracking-widest text-[9px] font-bold text-stone-400 border-b border-stone-100 pb-1 mb-4">
-            <span className="w-16 text-center">75 cl</span>
-            <span className="w-16 text-right">150 cl</span>
+          <div className="flex justify-end font-mono uppercase tracking-widest text-[9.5px] font-bold text-stone-400 border-b border-stone-100 pb-1 mb-4 gap-2">
+            <span className="w-16 text-right pr-1">75 cl</span>
+            <span className="w-16 text-right pr-1">150 cl</span>
           </div>
 
           <div className="text-center mb-6">
@@ -1036,9 +1155,9 @@ export const WineMenuDocumentStyle: React.FC = () => {
     return (
       <div className="flex flex-col justify-between h-full relative z-10 px-[5mm] py-[5mm]">
         <div>
-          <div className="flex justify-end font-sans uppercase tracking-widest text-[9px] font-bold text-stone-400 border-b border-stone-100 pb-1 mb-4">
-            <span className="w-16 text-center">75 cl</span>
-            <span className="w-16 text-right">150 cl</span>
+          <div className="flex justify-end font-mono uppercase tracking-widest text-[9.5px] font-bold text-stone-400 border-b border-stone-100 pb-1 mb-4 gap-2">
+            <span className="w-16 text-right pr-1">75 cl</span>
+            <span className="w-16 text-right pr-1">150 cl</span>
           </div>
 
           <div className="text-center mb-6">
@@ -1079,9 +1198,9 @@ export const WineMenuDocumentStyle: React.FC = () => {
     return (
       <div className="flex flex-col justify-between h-full relative z-10 px-[5mm] py-[5mm]">
         <div>
-          <div className="flex justify-end font-sans uppercase tracking-widest text-[9px] font-bold text-stone-400 border-b border-stone-100 pb-1 mb-4">
-            <span className="w-16 text-center">75 cl</span>
-            <span className="w-16 text-right">150 cl</span>
+          <div className="flex justify-end font-mono uppercase tracking-widest text-[9.5px] font-bold text-stone-400 border-b border-stone-100 pb-1 mb-4 gap-2">
+            <span className="w-16 text-right pr-1">75 cl</span>
+            <span className="w-16 text-right pr-1">150 cl</span>
           </div>
 
           <div className="text-center mb-6">
@@ -1122,9 +1241,9 @@ export const WineMenuDocumentStyle: React.FC = () => {
     return (
       <div className="flex flex-col justify-between h-full relative z-10 px-[5mm] py-[5mm]">
         <div>
-          <div className="flex justify-end font-sans uppercase tracking-widest text-[9px] font-bold text-stone-400 border-b border-stone-100 pb-1 mb-4">
-            <span className="w-16 text-center">75 cl</span>
-            <span className="w-16 text-right">150 cl</span>
+          <div className="flex justify-end font-mono uppercase tracking-widest text-[9.5px] font-bold text-stone-400 border-b border-stone-100 pb-1 mb-4 gap-2">
+            <span className="w-16 text-right pr-1">75 cl</span>
+            <span className="w-16 text-right pr-1">150 cl</span>
           </div>
 
           <div className="text-center mb-6">
@@ -1185,6 +1304,91 @@ export const WineMenuDocumentStyle: React.FC = () => {
 
         <div className="h-[1px] bg-stone-100" />
 
+        {/* Contrôles Sommelier : Afficher / Masquer & Stock en direct */}
+        <div className="space-y-3 p-4 bg-stone-50 border border-stone-200/90 rounded-2xl">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-bold text-stone-900 text-xs flex items-center gap-1.5">
+                <Eye className="w-4 h-4 text-[#BD6346]" />
+                Mode Personnalisation
+              </p>
+              <p className="text-[10px] text-stone-500">Affiche l'œil pour masquer/afficher chaque vin</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setEditVisibilityMode(!editVisibilityMode)}
+              className={`w-11 h-6 rounded-full transition-all cursor-pointer relative p-1 ${
+                editVisibilityMode ? 'bg-[#BD6346]' : 'bg-stone-300'
+              }`}
+            >
+              <div className={`w-4 h-4 bg-white rounded-full transition-all shadow-sm ${
+                editVisibilityMode ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between pt-2.5 border-t border-stone-200/60">
+            <div>
+              <p className="font-bold text-stone-900 text-xs">Badges de Stock (Écran)</p>
+              <p className="text-[10px] text-stone-500">Voir les bouteilles & magnums restants (masqué au PDF)</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowStockBadges(!showStockBadges)}
+              className={`w-11 h-6 rounded-full transition-all cursor-pointer relative p-1 ${
+                showStockBadges ? 'bg-amber-600' : 'bg-stone-300'
+              }`}
+            >
+              <div className={`w-4 h-4 bg-white rounded-full transition-all shadow-sm ${
+                showStockBadges ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Recherche rapide dans la carte */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] uppercase tracking-wider text-stone-400 font-bold block">
+            Recherche dans le livre
+          </label>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Filtrer vin, cuvée, domaine..."
+            className="w-full h-10 bg-stone-50 border border-stone-200 focus:border-[#BD6346] rounded-xl px-3 text-xs text-stone-900 outline-none transition-all font-sans"
+          />
+        </div>
+
+        {/* Filtre Bouteilles en Stock (dynamique) */}
+        <div className="space-y-2">
+          <label className="text-[10px] uppercase tracking-wider text-stone-400 font-bold block">
+            Filtre Bouteilles en Stock
+          </label>
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-stone-50 rounded-xl border border-stone-150 text-xs">
+            <button
+              onClick={() => setStockFilterMode('in_stock')}
+              className={`py-2 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                stockFilterMode === 'in_stock'
+                  ? 'bg-stone-900 text-white shadow'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              En stock (&gt; 0 bt)
+            </button>
+            <button
+              onClick={() => setStockFilterMode('all')}
+              className={`py-2 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                stockFilterMode === 'all'
+                  ? 'bg-stone-900 text-white shadow'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              Toutes réf. (ruptures)
+            </button>
+          </div>
+        </div>
+
         {/* Filter site toggle */}
         <div className="space-y-2">
           <label className="text-[10px] uppercase tracking-wider text-stone-400 font-bold block">
@@ -1199,7 +1403,7 @@ export const WineMenuDocumentStyle: React.FC = () => {
                   : 'text-stone-500 hover:text-stone-800'
               }`}
             >
-              Salle (Sites 1 & 2)
+              Salle (Sites 1 à 4)
             </button>
             <button
               onClick={() => setFilterMode('all')}
@@ -1209,7 +1413,7 @@ export const WineMenuDocumentStyle: React.FC = () => {
                   : 'text-stone-500 hover:text-stone-800'
               }`}
             >
-              Cave Entière (Qté &gt; 0)
+              Cave Entière (1 à 7)
             </button>
           </div>
         </div>

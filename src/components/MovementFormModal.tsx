@@ -432,91 +432,121 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
             </div>
           )}
 
-          {/* 4. Quantity and Reason */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* 4. Quantity and Direct Reason Buttons (Sans menu déroulant ni boutons +/-) */}
+          <div className="space-y-4">
             <div>
-              <label className="block text-[11px] text-slate-500 mb-1 font-mono uppercase tracking-wider font-bold">
-                Quantité (Bouteilles) *
+              <label className="block text-[11px] text-slate-500 mb-2 font-mono uppercase tracking-wider font-bold">
+                Quantité (Bouteilles) * — Choix direct
               </label>
-              <input
-                type="number"
-                required
-                min="1"
-                value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-full h-11 bg-slate-50 border border-slate-200 focus:border-red-500 rounded-xl px-4 text-slate-950 text-sm outline-none transition-all font-mono font-bold"
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                {[1, 2, 3, 4, 6, 12].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setQuantity(n)}
+                    className={`h-10 px-4 rounded-xl font-mono text-sm font-bold border transition-all cursor-pointer ${
+                      quantity === n
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-400'
+                    }`}
+                  >
+                    {n} bt
+                  </button>
+                ))}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={quantity}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/[^0-9]/g, '');
+                    setQuantity(cleaned ? Math.max(1, parseInt(cleaned, 10)) : 1);
+                  }}
+                  placeholder="Autre qté"
+                  className="w-24 h-10 bg-slate-50 border border-slate-200 focus:border-red-500 rounded-xl px-3 text-slate-950 text-sm text-center outline-none transition-all font-mono font-bold"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-[11px] text-slate-500 mb-1 font-mono uppercase tracking-wider font-bold">
-                Motif réglementaire *
-              </label>
-              <select
-                value={reason}
-                onChange={(e) => setReason(e.target.value as MovementReason)}
-                required
-                className="w-full h-11 bg-slate-50 border border-slate-200 focus:border-red-500 text-slate-700 text-xs rounded-xl px-3 outline-none cursor-pointer font-medium"
-              >
-                {type === 'in' && (
-                  <>
-                    <option value="livraison">Achat / Livraison fournisseur</option>
-                    <option value="correction">Correction positive d'inventaire</option>
-                    <option value="autre">Autre entrée de stock</option>
-                  </>
-                )}
+            {type !== 'transfer' && (
+              <div>
+                <label className="block text-[11px] text-slate-500 mb-2 font-mono uppercase tracking-wider font-bold">
+                  {type === 'out'
+                    ? 'Choix direct de sortie de bouteille * (1 clic, sans menu déroulant)'
+                    : 'Choix direct du motif * (1 clic, sans menu déroulant)'}
+                </label>
+
                 {type === 'out' && (
-                  <>
-                    <option value="vente">Vente</option>
-                    <option value="offert">Offert</option>
-                    <option value="casse">Casse</option>
-                    <option value="bouchon">Bouchon</option>
-                    <option value="correction">Correction</option>
-                    <option value="autre">Autre sortie de stock</option>
-                  </>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {[
+                      { key: 'vente' as const, label: '🍷 Vente', activeClass: 'bg-emerald-700 text-white border-emerald-700 shadow-sm', idleClass: 'bg-emerald-50/60 text-emerald-900 border-emerald-200 hover:bg-emerald-100' },
+                      { key: 'offert' as const, label: '🎁 Offert', activeClass: 'bg-purple-700 text-white border-purple-700 shadow-sm', idleClass: 'bg-purple-50/60 text-purple-900 border-purple-200 hover:bg-purple-100' },
+                      { key: 'casse' as const, label: '💔 Casse', activeClass: 'bg-amber-600 text-white border-amber-600 shadow-sm', idleClass: 'bg-amber-50/60 text-amber-900 border-amber-200 hover:bg-amber-100' },
+                      { key: 'bouchon' as const, label: '🍾 Bouchon', activeClass: 'bg-rose-700 text-white border-rose-700 shadow-sm', idleClass: 'bg-rose-50/60 text-rose-900 border-rose-200 hover:bg-rose-100' },
+                      { key: 'correction' as const, label: '⚖️ Correction', activeClass: 'bg-sky-700 text-white border-sky-700 shadow-sm', idleClass: 'bg-sky-50/60 text-sky-900 border-sky-200 hover:bg-sky-100' },
+                    ].map(btn => (
+                      <button
+                        key={btn.key}
+                        type="button"
+                        onClick={() => setReason(btn.key)}
+                        className={`h-11 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          reason === btn.key ? btn.activeClass : btn.idleClass
+                        }`}
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
                 )}
-                {type === 'transfer' && (
-                  <option value="transfert">Transfert inter-celliers standard</option>
-                )}
-                {type === 'correction' && (
-                  <>
-                    <option value="correction">Correction / Audit d'inventaire</option>
-                    <option value="vente">Vente</option>
-                    <option value="offert">Offert</option>
-                    <option value="casse">Casse</option>
-                    <option value="bouchon">Bouchon</option>
-                    <option value="livraison">Livraison tardive régularisée</option>
-                    <option value="autre">Autre ajustement manuel</option>
-                  </>
-                )}
-              </select>
 
-              {/* Raccourcis rapides pour les 5 motifs réglementaires (Vente, Offert, Casse, Bouchon, Correction) */}
-              {(type === 'out' || type === 'correction') && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {[
-                    { key: 'vente' as const, label: 'Vente', color: 'hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300' },
-                    { key: 'offert' as const, label: 'Offert', color: 'hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300' },
-                    { key: 'casse' as const, label: 'Casse', color: 'hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300' },
-                    { key: 'bouchon' as const, label: 'Bouchon', color: 'hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300' },
-                    { key: 'correction' as const, label: 'Correction', color: 'hover:bg-sky-50 hover:text-sky-700 hover:border-sky-300' },
-                  ].map(btn => (
-                    <button
-                      key={btn.key}
-                      type="button"
-                      onClick={() => setReason(btn.key)}
-                      className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded-md border transition-all cursor-pointer ${
-                        reason === btn.key
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                          : `bg-slate-100 text-slate-600 border-slate-200 ${btn.color}`
-                      }`}
-                    >
-                      {btn.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                {type === 'in' && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { key: 'livraison' as const, label: '📦 Livraison / Achat', activeClass: 'bg-emerald-700 text-white border-emerald-700 shadow-sm', idleClass: 'bg-emerald-50/60 text-emerald-900 border-emerald-200 hover:bg-emerald-100' },
+                      { key: 'correction' as const, label: '⚖️ Correction', activeClass: 'bg-sky-700 text-white border-sky-700 shadow-sm', idleClass: 'bg-sky-50/60 text-sky-900 border-sky-200 hover:bg-sky-100' },
+                      { key: 'autre' as const, label: '📝 Autre entrée', activeClass: 'bg-slate-800 text-white border-slate-800 shadow-sm', idleClass: 'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200' },
+                    ].map(btn => (
+                      <button
+                        key={btn.key}
+                        type="button"
+                        onClick={() => setReason(btn.key)}
+                        className={`h-11 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          reason === btn.key ? btn.activeClass : btn.idleClass
+                        }`}
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {type === 'correction' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      { key: 'correction' as const, label: '⚖️ Correction stock' },
+                      { key: 'vente' as const, label: '🍷 Vente' },
+                      { key: 'offert' as const, label: '🎁 Offert' },
+                      { key: 'casse' as const, label: '💔 Casse' },
+                      { key: 'bouchon' as const, label: '🍾 Bouchon' },
+                      { key: 'livraison' as const, label: '📦 Livraison' },
+                    ].map(btn => (
+                      <button
+                        key={btn.key}
+                        type="button"
+                        onClick={() => setReason(btn.key)}
+                        className={`h-11 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center justify-center ${
+                          reason === btn.key
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                            : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                        }`}
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 5. Notes */}

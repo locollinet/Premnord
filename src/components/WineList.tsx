@@ -6,7 +6,8 @@ import { classifyWineRegionAndSubRegion } from '../lib/wineGrouping';
 import { exportLiveStockToExcel } from '../lib/accountingExportXlsx';
 import { MultiSiteDispatchModal } from './MultiSiteDispatchModal';
 import { ZeroStockManagementModal } from './ZeroStockManagementModal';
-import { Search, Plus, Filter, ArrowUpDown, ChevronRight, SlidersHorizontal, AlertTriangle, Check, RefreshCw, ArrowRightLeft, FileSpreadsheet, X, Package, Download, Sparkles, Trash2, EyeOff, Scale } from 'lucide-react';
+import { Search, Plus, Filter, ArrowUpDown, ChevronRight, SlidersHorizontal, AlertTriangle, Check, RefreshCw, ArrowRightLeft, FileSpreadsheet, X, Package, Download, Sparkles, Trash2, EyeOff, Scale, RotateCcw, History, ArrowDownRight } from 'lucide-react';
+import { UndoMovementsModal } from './UndoMovementsModal';
 
 interface WineListProps {
   onSelectWine: (wineId: string) => void;
@@ -28,7 +29,7 @@ const COLOR_BADGES: Record<WineColor, { label: string; badge: string }> = {
 };
 
 export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onNavigateToAccounting, onRecordMovement }) => {
-  const { wines, sites, updateWine, addMovement } = useFirebase();
+  const { wines, sites, updateWine, addMovement, undoneMovements } = useFirebase();
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -82,9 +83,42 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
   const [dispatchWine, setDispatchWine] = useState<Wine | null>(null);
   const [isZeroStockModalOpen, setIsZeroStockModalOpen] = useState(false);
+  const [isUndoModalOpen, setIsUndoModalOpen] = useState(false);
+  const [quickExitSiteWineId, setQuickExitSiteWineId] = useState<string | null>(null);
 
   // Live count of zero stock references in cellar
   const zeroStockCount = React.useMemo(() => wines.filter(w => (w.quantity || 0) === 0).length, [wines]);
+
+  // Direct exit handler (choix direct en 1 clic sans menu déroulant ni +/- aveugles)
+  const handleDirectExit = async (
+    e: React.MouseEvent,
+    wine: Wine,
+    reason: 'vente' | 'offert' | 'casse' | 'bouchon' | 'correction'
+  ) => {
+    e.stopPropagation();
+    if (wine.quantity <= 0) return;
+
+    setAdjustingId(`${wine.id}_${reason}`);
+    const newQuantity = wine.quantity - 1;
+
+    try {
+      await updateWine(wine.id, { quantity: newQuantity }, 'stock');
+      await addMovement({
+        wineId: wine.id,
+        wineName: `${wine.name} (${wine.vintage})`,
+        type: 'out',
+        quantity: 1,
+        reason,
+        notes: `Sortie directe 1 bt (${reason}) depuis le catalogue de cave`,
+        fromSiteId: wine.siteId
+      });
+      setQuickExitSiteWineId(null);
+    } catch (err) {
+      console.error('Error during direct exit:', err);
+    } finally {
+      setTimeout(() => setAdjustingId(null), 300);
+    }
+  };
 
   // Quick stock change handler (+1 / -1 bottle)
   const handleQuickStockChange = async (e: React.MouseEvent, wine: Wine, change: number) => {
@@ -570,7 +604,7 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
             <Search className="w-5 h-5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Rechercher nom, domaine, région, ou coordonnée (ex: 1D4)..."
+              placeholder='Rechercher nom, domaine, appellation (ex: Bourgnonne Cote d’or)... ou "formule exacte"'
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full h-11 bg-slate-50 border border-slate-200 focus:border-red-500 focus:ring-1 focus:ring-red-500 rounded-xl pl-11 pr-4 text-slate-900 text-sm outline-none transition-all"
@@ -810,6 +844,22 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
             >
               <Trash2 className="w-4 h-4 text-rose-500" />
               <span>Réf. Stock 0 ({zeroStockCount})</span>
+            </button>
+
+            {/* Undo / Redo Movements modal shortcut */}
+            <button
+              type="button"
+              onClick={() => setIsUndoModalOpen(true)}
+              className="h-11 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 px-3.5 rounded-xl flex items-center gap-1.5 font-bold transition-all cursor-pointer text-xs font-sans shadow-2xs select-none"
+              title="Comprendre ce qu'on va annuler, choisir X mouvements antérieurs et rétablir"
+            >
+              <RotateCcw className="w-4 h-4 text-amber-700" />
+              <span>Annuler / Rétablir</span>
+              {undoneMovements.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-emerald-600 text-white text-[10px] font-black">
+                  {undoneMovements.length}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -1277,42 +1327,98 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
                               </span>
                               
                               <div className="flex items-center gap-1">
-                                {onRecordMovement && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onRecordMovement(siteWine);
-                                    }}
-                                    className="w-7 h-7 bg-white hover:bg-amber-50 text-slate-500 hover:text-amber-700 border border-slate-200 hover:border-amber-200 rounded-lg flex items-center justify-center transition-all active:scale-95 cursor-pointer select-none"
-                                    title="Ajuster le stock & justifier le motif (Vente, Offert, Casse, Bouchon, Correction)"
-                                  >
-                                    <Scale className="w-3.5 h-3.5" />
-                                  </button>
+                                {quickExitSiteWineId === siteWine.id ? (
+                                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-red-300 shadow-md animate-in fade-in zoom-in-95">
+                                    <span className="text-[10px] font-bold text-red-900 uppercase px-1">Sortie :</span>
+                                    <button
+                                      type="button"
+                                      disabled={adjustingId !== null}
+                                      onClick={(e) => handleDirectExit(e, siteWine, 'vente')}
+                                      className="px-2 py-1 text-[10px] font-bold rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-all cursor-pointer"
+                                      title="Sortie 1 bt : Vente"
+                                    >
+                                      🍷 Vente
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={adjustingId !== null}
+                                      onClick={(e) => handleDirectExit(e, siteWine, 'offert')}
+                                      className="px-2 py-1 text-[10px] font-bold rounded-lg bg-purple-50 text-purple-800 border border-purple-200 hover:bg-purple-100 transition-all cursor-pointer"
+                                      title="Sortie 1 bt : Offert"
+                                    >
+                                      🎁 Offert
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={adjustingId !== null}
+                                      onClick={(e) => handleDirectExit(e, siteWine, 'casse')}
+                                      className="px-2 py-1 text-[10px] font-bold rounded-lg bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-all cursor-pointer"
+                                      title="Sortie 1 bt : Casse"
+                                    >
+                                      💔 Casse
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={adjustingId !== null}
+                                      onClick={(e) => handleDirectExit(e, siteWine, 'bouchon')}
+                                      className="px-2 py-1 text-[10px] font-bold rounded-lg bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 transition-all cursor-pointer"
+                                      title="Sortie 1 bt : Bouchon"
+                                    >
+                                      🍾 Bouchon
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={adjustingId !== null}
+                                      onClick={(e) => handleDirectExit(e, siteWine, 'correction')}
+                                      className="px-2 py-1 text-[10px] font-bold rounded-lg bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100 transition-all cursor-pointer"
+                                      title="Sortie 1 bt : Correction"
+                                    >
+                                      ⚖️ Correction
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setQuickExitSiteWineId(null);
+                                      }}
+                                      className="p-1 text-slate-400 hover:text-slate-700 rounded-md transition-colors"
+                                      title="Fermer le choix"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setQuickExitSiteWineId(siteWine.id);
+                                      }}
+                                      disabled={siteWine.quantity === 0 || adjustingId !== null}
+                                      className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-slate-200 hover:border-rose-300 rounded-lg flex items-center gap-1 font-bold text-[11px] transition-all active:scale-95 disabled:opacity-30 cursor-pointer select-none"
+                                      title="Sortie 1 bt (choix direct du motif : Vente, Offert, Casse, Bouchon, Correction)"
+                                    >
+                                      <ArrowDownRight className="w-3.5 h-3.5 text-rose-600" />
+                                      <span>Sortie</span>
+                                    </button>
+
+                                    {onRecordMovement && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onRecordMovement(siteWine);
+                                        }}
+                                        className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 rounded-lg flex items-center gap-1 font-bold text-[11px] transition-all active:scale-95 cursor-pointer select-none"
+                                        title="Entrée ou ajustement de stock (boutons tactiles sans menu déroulant)"
+                                      >
+                                        <Scale className="w-3.5 h-3.5 text-slate-500" />
+                                        <span>Entrée / Mvt</span>
+                                      </button>
+                                    )}
+                                  </>
                                 )}
-                                <button
-                                  onClick={(e) => handleQuickStockChange(e, siteWine, -1)}
-                                  disabled={siteWine.quantity === 0 || adjustingId !== null}
-                                  className="w-7 h-7 bg-white hover:bg-rose-50 text-slate-500 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-lg flex items-center justify-center font-mono font-bold text-xs transition-all active:scale-95 disabled:opacity-30 cursor-pointer select-none"
-                                  title="Sortir 1 bouteille"
-                                >
-                                  {adjustingId === `${siteWine.id}_dec` ? (
-                                    <RefreshCw className="w-3 h-3 animate-spin text-red-500" />
-                                  ) : (
-                                    '-'
-                                  )}
-                                </button>
-                                <button
-                                  onClick={(e) => handleQuickStockChange(e, siteWine, 1)}
-                                  disabled={adjustingId !== null}
-                                  className="w-7 h-7 bg-white hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 border border-slate-200 hover:border-emerald-200 rounded-lg flex items-center justify-center font-mono font-bold text-xs transition-all active:scale-95 disabled:opacity-30 cursor-pointer select-none"
-                                  title="Entrer 1 bouteille"
-                                >
-                                  {adjustingId === `${siteWine.id}_inc` ? (
-                                    <RefreshCw className="w-3 h-3 animate-spin text-emerald-500" />
-                                  ) : (
-                                    '+'
-                                  )}
-                                </button>
                               </div>
                             </div>
                           </div>
@@ -1352,6 +1458,12 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
         isOpen={isZeroStockModalOpen}
         onClose={() => setIsZeroStockModalOpen(false)}
         onSelectWine={onSelectWine}
+      />
+
+      {/* Undo / Redo Recent Movements Modal */}
+      <UndoMovementsModal
+        isOpen={isUndoModalOpen}
+        onClose={() => setIsUndoModalOpen(false)}
       />
     </div>
   );

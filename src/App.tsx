@@ -9,6 +9,7 @@ import { MobileInventory } from './components/MobileInventory';
 import { WineDetailModal } from './components/WineDetailModal';
 import { WineFormModal } from './components/WineFormModal';
 import { MovementFormModal } from './components/MovementFormModal';
+import { UndoMovementsModal } from './components/UndoMovementsModal';
 import { Wine } from './types';
 import { PremnordLogo } from './components/PremnordLogo';
 import { Settings } from './components/Settings';
@@ -29,7 +30,8 @@ import {
   AlertTriangle,
   Sliders,
   Coins,
-  FileSpreadsheet
+  FileSpreadsheet,
+  RotateCcw
 } from 'lucide-react';
 
 type Tab = 'dashboard' | 'wines' | 'commercial' | 'accounting' | 'menu' | 'mobile' | 'sites' | 'settings';
@@ -41,7 +43,7 @@ interface AlertNotification {
 }
 
 function AppContent() {
-  const { user, loading, isDemo, logout, syncLocalToFirebase, sites } = useFirebase();
+  const { user, loading, isDemo, logout, syncLocalToFirebase, sites, undoneMovements } = useFirebase();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [syncing, setSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
@@ -70,6 +72,7 @@ function AppContent() {
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [wineForMovement, setWineForMovement] = useState<Wine | null>(null);
   const [isAddingMovement, setIsAddingMovement] = useState(false);
+  const [isUndoModalOpen, setIsUndoModalOpen] = useState(false);
 
   // In-app alert toasts registry
   const [toasts, setToasts] = useState<AlertNotification[]>([]);
@@ -313,6 +316,21 @@ function AppContent() {
               Entrée / Sortie / Transfert
             </button>
 
+            {/* Undo / Redo Movements shortcut */}
+            <button
+              onClick={() => setIsUndoModalOpen(true)}
+              className="h-10 px-4 rounded-xl flex items-center gap-2 font-bold text-xs text-amber-900 bg-amber-50 hover:bg-amber-100 transition-all cursor-pointer border border-amber-300 whitespace-nowrap uppercase font-mono shadow-xs"
+              title="Annuler ou rétablir les derniers mouvements de stock"
+            >
+              <RotateCcw className="w-3.5 h-3.5 shrink-0 text-amber-700" />
+              Annuler / Rétablir
+              {undoneMovements.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-emerald-600 text-white text-[10px] font-black">
+                  {undoneMovements.length}
+                </span>
+              )}
+            </button>
+
             {/* Tab: Sites Storage Configurator */}
             <button
               onClick={() => setActiveTab('sites')}
@@ -497,6 +515,12 @@ function AppContent() {
           onAlertTriggered={handleAlertTriggered}
         />
       )}
+
+      {/* Modal 4: Undo / Redo Recent Movements */}
+      <UndoMovementsModal
+        isOpen={isUndoModalOpen}
+        onClose={() => setIsUndoModalOpen(false)}
+      />
 
     </div>
   );

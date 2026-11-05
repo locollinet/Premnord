@@ -66,6 +66,10 @@ interface FirebaseContextType {
   resetRegionsToDefault: () => Promise<void>;
 
   addMovement: (movement: Omit<Movement, 'id' | 'userId' | 'userName' | 'createdAt'> & { createdAt?: number; userId?: string; userName?: string }) => Promise<string>;
+  undoneMovements: Movement[];
+  undoMovements: (movementIds: string[]) => Promise<number>;
+  redoMovements: (movementIds: string[]) => Promise<number>;
+  clearUndoneMovements: () => void;
   syncLocalToFirebase: () => Promise<void>;
   cleanZeroStockResiduals: () => Promise<number>;
   deduplicateCellar: (selectedKeys?: string[], customOverrides?: Record<string, Partial<Wine>>) => Promise<number>;
@@ -237,6 +241,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [wines, setWines] = useState<Wine[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
+  const [undoneMovements, setUndoneMovements] = useState<Movement[]>(() => {
+    try {
+      const saved = localStorage.getItem('premnord_undone_movements');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [appLogo, setAppLogo] = useState<string | null>(null);
   const [watermarkLogo, setWatermarkLogo] = useState<string | null>(null);
 
@@ -250,6 +262,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const winesStateRef = useRef<Wine[]>([]);
   const sitesStateRef = useRef<Site[]>([]);
   const movementsStateRef = useRef<Movement[]>([]);
+  const undoneMovementsRef = useRef<Movement[]>(undoneMovements);
   const regionsStateRef = useRef<WineRegion[]>(DEFAULT_WINE_REGIONS);
   const regionGroupsStateRef = useRef<string[]>(DEFAULT_REGION_GROUPS);
   
@@ -1140,6 +1153,224 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
+      throw err;
+    }
+  };
+
+  const persistUndoneMovements = (next: Movement[]) => {
+    const capped = next.slice(0, 50);
+    undoneMovementsRef.current = capped;
+    setUndoneMovements(capped);
+    try {
+      localStorage.setItem('premnord_undone_movements', JSON.stringify(capped));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const clearUndoneMovements = () => {
+    persistUndoneMovements([]);
+  };
+
+  const findWineForMovementSite = (mov: Movement, siteId: string | undefined, allWines: Wine[]): Wine | undefined => {
+    if (!siteId) return allWines.find(w => w.id === mov.wineId);
+    const direct = allWines.find(w => w.id === mov.wineId && w.siteId === siteId);
+    if (direct) return direct;
+    const baseWine = allWines.find(w => w.id === mov.wineId);
+    if (baseWine) {
+      const sibling = allWines.find(w => w.siteId === siteId && isSameWineReference(w, baseWine));
+      if (sibling) return sibling;
+    }
+    return allWines.find(
+      w =>
+        w.siteId === siteId &&
+        normalizeWineString(w.name) === normalizeWineString(mov.wineName) &&
+        normalizeWineString(w.domain) === normalizeWineString(mov.domain) &&
+        normalizeWineString(w.vintage) === normalizeWineString(mov.vintage)
+    );
+  };
+
+  /**
+   * Annule les mouvements sélectionnés (ex: les X derniers mouvements),
+   * restaure exactement les quantités de stock correspondantes et conserve les mouvements
+   * annulés dans la pile "Rétablir" (undoneMovements).
+   */
+  const undoMovements = async (movementIds: string[]): Promise<number> => {
+    if (!movementIds || movementIds.length === 0) return 0;
+    const idSet = new Set(movementIds);
+    const toUndo = movementsStateRef.current.filter(m => idSet.has(m.id));
+    if (toUndo.length === 0) return 0;
+
+    const currentWines = [...winesStateRef.current];
+    const stockDeltas = new Map<string, number>();
+
+    const addDelta = (wineId: string, delta: number) => {
+      stockDeltas.set(wineId, (stockDeltas.get(wineId) || 0) + delta);
+    };
+
+    toUndo.forEach(mov => {
+      const qty = Math.abs(mov.quantity || 0);
+      if (qty === 0) return;
+
+      if (mov.type === 'out') {
+        const target = findWineForMovementSite(mov, mov.fromSiteId, currentWines) || currentWines.find(w => w.id === mov.wineId);
+        if (target) addDelta(target.id, +qty);
+      } else if (mov.type === 'in') {
+        const target = findWineForMovementSite(mov, mov.toSiteId, currentWines) || currentWines.find(w => w.id === mov.wineId);
+        if (target) addDelta(target.id, -qty);
+      } else if (mov.type === 'transfer') {
+        const fromWine = findWineForMovementSite(mov, mov.fromSiteId, currentWines) || currentWines.find(w => w.id === mov.wineId);
+        const toWine = findWineForMovementSite(mov, mov.toSiteId, currentWines);
+        if (fromWine) addDelta(fromWine.id, +qty);
+        if (toWine) addDelta(toWine.id, -qty);
+      } else if (mov.type === 'correction') {
+        if (mov.fromSiteId && !mov.toSiteId) {
+          const target = findWineForMovementSite(mov, mov.fromSiteId, currentWines) || currentWines.find(w => w.id === mov.wineId);
+          if (target) addDelta(target.id, +qty);
+        } else {
+          const target = findWineForMovementSite(mov, mov.toSiteId, currentWines) || currentWines.find(w => w.id === mov.wineId);
+          if (target) addDelta(target.id, -qty);
+        }
+      }
+    });
+
+    const now = Date.now();
+    const updatedWines = currentWines.map(w => {
+      const delta = stockDeltas.get(w.id);
+      if (!delta) return w;
+      return {
+        ...w,
+        quantity: Math.max(0, w.quantity + delta),
+        updatedAt: now
+      };
+    });
+
+    const remainingMovements = movementsStateRef.current.filter(m => !idSet.has(m.id));
+
+    // Optimistic local state update
+    winesStateRef.current = updatedWines;
+    setWines(updatedWines);
+    movementsStateRef.current = remainingMovements;
+    setMovements(remainingMovements);
+    persistUndoneMovements([...toUndo, ...undoneMovementsRef.current]);
+
+    if (isDemo || !user) {
+      saveLocalData(updatedWines, undefined, remainingMovements);
+      return toUndo.length;
+    }
+
+    try {
+      const db = getFirebaseDb();
+      const batch = writeBatch(db);
+      stockDeltas.forEach((delta, wineId) => {
+        if (delta === 0) return;
+        const updatedWine = updatedWines.find(w => w.id === wineId);
+        if (updatedWine) {
+          batch.update(doc(db, 'wines', wineId), {
+            quantity: updatedWine.quantity,
+            updatedAt: now
+          });
+        }
+      });
+      toUndo.forEach(mov => {
+        batch.delete(doc(db, 'movements', mov.id));
+      });
+      await batch.commit();
+      return toUndo.length;
+    } catch (err) {
+      console.error('Error undoing movements:', err);
+      throw err;
+    }
+  };
+
+  /**
+   * Rétablit (Redo) les mouvements précédemment annulés :
+   * réapplique l'effet de stock et recrée les mouvements dans l'historique.
+   */
+  const redoMovements = async (movementIds: string[]): Promise<number> => {
+    if (!movementIds || movementIds.length === 0) return 0;
+    const idSet = new Set(movementIds);
+    const toRedo = undoneMovementsRef.current.filter(m => idSet.has(m.id));
+    if (toRedo.length === 0) return 0;
+
+    const currentWines = [...winesStateRef.current];
+    const stockDeltas = new Map<string, number>();
+
+    const addDelta = (wineId: string, delta: number) => {
+      stockDeltas.set(wineId, (stockDeltas.get(wineId) || 0) + delta);
+    };
+
+    toRedo.forEach(mov => {
+      const qty = Math.abs(mov.quantity || 0);
+      if (qty === 0) return;
+
+      if (mov.type === 'out') {
+        const target = findWineForMovementSite(mov, mov.fromSiteId, currentWines) || currentWines.find(w => w.id === mov.wineId);
+        if (target) addDelta(target.id, -qty);
+      } else if (mov.type === 'in') {
+        const target = findWineForMovementSite(mov, mov.toSiteId, currentWines) || currentWines.find(w => w.id === mov.wineId);
+        if (target) addDelta(target.id, +qty);
+      } else if (mov.type === 'transfer') {
+        const fromWine = findWineForMovementSite(mov, mov.fromSiteId, currentWines) || currentWines.find(w => w.id === mov.wineId);
+        const toWine = findWineForMovementSite(mov, mov.toSiteId, currentWines);
+        if (fromWine) addDelta(fromWine.id, -qty);
+        if (toWine) addDelta(toWine.id, +qty);
+      } else if (mov.type === 'correction') {
+        if (mov.fromSiteId && !mov.toSiteId) {
+          const target = findWineForMovementSite(mov, mov.fromSiteId, currentWines) || currentWines.find(w => w.id === mov.wineId);
+          if (target) addDelta(target.id, -qty);
+        } else {
+          const target = findWineForMovementSite(mov, mov.toSiteId, currentWines) || currentWines.find(w => w.id === mov.wineId);
+          if (target) addDelta(target.id, +qty);
+        }
+      }
+    });
+
+    const now = Date.now();
+    const updatedWines = currentWines.map(w => {
+      const delta = stockDeltas.get(w.id);
+      if (!delta) return w;
+      return {
+        ...w,
+        quantity: Math.max(0, w.quantity + delta),
+        updatedAt: now
+      };
+    });
+
+    const restoredMovements = [...toRedo, ...movementsStateRef.current].sort((a, b) => b.createdAt - a.createdAt);
+    const remainingUndone = undoneMovementsRef.current.filter(m => !idSet.has(m.id));
+
+    winesStateRef.current = updatedWines;
+    setWines(updatedWines);
+    movementsStateRef.current = restoredMovements;
+    setMovements(restoredMovements);
+    persistUndoneMovements(remainingUndone);
+
+    if (isDemo || !user) {
+      saveLocalData(updatedWines, undefined, restoredMovements);
+      return toRedo.length;
+    }
+
+    try {
+      const db = getFirebaseDb();
+      const batch = writeBatch(db);
+      stockDeltas.forEach((delta, wineId) => {
+        if (delta === 0) return;
+        const updatedWine = updatedWines.find(w => w.id === wineId);
+        if (updatedWine) {
+          batch.update(doc(db, 'wines', wineId), {
+            quantity: updatedWine.quantity,
+            updatedAt: now
+          });
+        }
+      });
+      toRedo.forEach(mov => {
+        batch.set(doc(db, 'movements', mov.id), cleanUndefined(mov));
+      });
+      await batch.commit();
+      return toRedo.length;
+    } catch (err) {
+      console.error('Error redoing movements:', err);
       throw err;
     }
   };
@@ -2055,6 +2286,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       reorderRegions,
       resetRegionsToDefault,
       addMovement,
+      undoneMovements,
+      undoMovements,
+      redoMovements,
+      clearUndoneMovements,
       syncLocalToFirebase,
       cleanZeroStockResiduals,
       deduplicateCellar,
