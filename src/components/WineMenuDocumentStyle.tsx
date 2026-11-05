@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Wine } from '../types';
 import { PremnordLogo } from './PremnordLogo';
+import { PREMNORD_WATERMARK_BASE64 } from '../assets/watermarkBase64';
 import { 
   Printer, 
   ChevronLeft, 
@@ -43,19 +44,29 @@ const getCanonicalDomain = (domain: string | undefined): string => {
   return (domain || '').trim();
 };
 
-// Détection des spiritueux, digestifs, liqueurs, softs et boissons hors-vin
+// Détection stricte des spiritueux, digestifs, liqueurs, alcools forts et softs (hors-vin)
 const isSpiritOrSoft = (wine: Wine): boolean => {
-  if (wine.color === 'spiritueux' || wine.color === 'soft' || wine.color === 'autre') return true;
-  const col = (wine.color || '').toLowerCase();
-  if (col.includes('spirit') || col.includes('digestif') || col.includes('liqueur')) return true;
+  if (!wine) return false;
+  const col = (wine.color || '').toLowerCase().trim();
+  if (['spiritueux', 'soft', 'autre', 'cidre_biere', 'biere'].includes(col)) return true;
+  if (col.includes('spirit') || col.includes('digestif') || col.includes('liqueur') || col.includes('alcool')) return true;
+
   const name = (wine.name || '').toLowerCase();
   const reg = (wine.region || '').toLowerCase();
   const app = (wine.appellation || '').toLowerCase();
-  const text = `${name} ${reg} ${app}`;
-  if (['cognac', 'armagnac', 'calvados', 'whisky', 'whiskey', 'chartreuse', 'rhum', 'rum', 'gin', 'vodka', 'marc de bourgogne', 'fine de bourgogne', 'eau-de-vie', 'eau de vie'].some(k => text.includes(k))) {
-    return true;
-  }
-  return false;
+  const cuv = (wine.cuvee || '').toLowerCase();
+  const not = (wine.notes || '').toLowerCase();
+  const text = `${name} ${reg} ${app} ${cuv} ${not}`;
+
+  const spiritKeywords = [
+    'cognac', 'armagnac', 'calvados', 'whisky', 'whiskey', 'bourbon',
+    'chartreuse', 'rhum', 'rum', 'gin', 'vodka', 'marc de bourgogne',
+    'fine de bourgogne', 'eau-de-vie', 'eau de vie', 'pastis', 'absinthe',
+    'tequila', 'mezcal', 'vermouth', 'amaro', 'grappa', 'porto',
+    'liqueur', 'digestif', 'distillat', 'genepi', 'génépi', 'limoncello'
+  ];
+
+  return spiritKeywords.some(k => text.includes(k));
 };
 
 const isMagnum = (wine: Wine): boolean => {
@@ -106,6 +117,94 @@ const formatWineDisplayTitle = (name: string, cuvee?: string): string => {
   }
   return cleanName;
 };
+
+
+// Entrée d'index officielle 100% ISO au document Word
+export interface TocEntry {
+  type: 'section' | 'item';
+  name: string;
+  page?: number;
+  targetPage: number;
+}
+
+export const TOC_COLUMN_1: TocEntry[] = [
+  { type: 'section', name: 'Domaine Prieuré Roch', page: 3, targetPage: 3 },
+  { type: 'section', name: 'Effervescences', targetPage: 4 },
+  { type: 'item', name: 'Champagne', page: 6, targetPage: 4 },
+  { type: 'item', name: 'Bourgogne', page: 7, targetPage: 4 },
+  { type: 'item', name: 'Loire – Jura', page: 7, targetPage: 4 },
+  { type: 'item', name: 'Savoie – Bugey', page: 8, targetPage: 4 },
+  { type: 'item', name: 'Alsace – Moselle', page: 8, targetPage: 4 },
+  { type: 'item', name: 'Sud-ouest', page: 8, targetPage: 4 },
+  { type: 'item', name: 'Corse', page: 8, targetPage: 4 },
+  { type: 'item', name: 'Espagne', page: 8, targetPage: 4 },
+  { type: 'item', name: 'Portugal', page: 8, targetPage: 4 },
+  { type: 'item', name: 'Italie', page: 9, targetPage: 4 },
+  { type: 'item', name: 'Etats-Unis', page: 9, targetPage: 4 },
+  { type: 'item', name: 'Co-fermentations', page: 9, targetPage: 4 },
+  { type: 'item', name: 'Cidres et Poirés', page: 9, targetPage: 4 },
+  { type: 'section', name: 'Vins Blancs', targetPage: 5 },
+  { type: 'item', name: 'Bourgogne', page: 10, targetPage: 5 },
+  { type: 'item', name: 'Beaujolais – Champagne – Jura', page: 15, targetPage: 5 },
+  { type: 'item', name: 'Savoie et vignobles alpins', page: 16, targetPage: 5 },
+  { type: 'item', name: 'Alsace', page: 17, targetPage: 5 },
+  { type: 'item', name: 'Moselle – Auvergne – Loire', page: 18, targetPage: 5 },
+  { type: 'item', name: 'Bordelais et Sud-Ouest', page: 20, targetPage: 5 },
+  { type: 'item', name: 'Rhône', page: 20, targetPage: 5 },
+  { type: 'item', name: 'Provence – Corse', page: 21, targetPage: 5 },
+  { type: 'item', name: 'Languedoc et Roussillon', page: 22, targetPage: 5 },
+  { type: 'item', name: 'Allemagne', page: 23, targetPage: 5 },
+  { type: 'item', name: 'Suisse', page: 23, targetPage: 5 },
+  { type: 'item', name: 'Autriche', page: 23, targetPage: 5 },
+  { type: 'item', name: 'Italie', page: 23, targetPage: 5 },
+  { type: 'item', name: 'Hongrie', page: 24, targetPage: 5 },
+  { type: 'item', name: 'Espagne', page: 24, targetPage: 5 },
+  { type: 'item', name: 'Portugal', page: 25, targetPage: 5 },
+  { type: 'item', name: 'Slovénie', page: 25, targetPage: 5 },
+  { type: 'item', name: 'Grèce', page: 25, targetPage: 5 },
+  { type: 'item', name: 'Géorgie', page: 26, targetPage: 5 },
+  { type: 'item', name: 'Etats-Unis', page: 26, targetPage: 5 },
+  { type: 'item', name: 'Chili', page: 26, targetPage: 5 },
+  { type: 'item', name: 'Argentine', page: 26, targetPage: 5 },
+];
+
+export const TOC_COLUMN_2: TocEntry[] = [
+  { type: 'item', name: 'Afrique du Sud', page: 26, targetPage: 5 },
+  { type: 'item', name: 'Australie – Nouvelle-Zélande', page: 27, targetPage: 5 },
+  { type: 'item', name: 'Japon', page: 27, targetPage: 5 },
+  { type: 'section', name: 'Vins Rosés', targetPage: 6 },
+  { type: 'item', name: 'Bourgogne', page: 25, targetPage: 6 },
+  { type: 'item', name: 'Rhône sud – Provence - Corse', page: 25, targetPage: 6 },
+  { type: 'item', name: 'Espagne', page: 25, targetPage: 6 },
+  { type: 'item', name: 'Bordelais', page: 25, targetPage: 6 },
+  { type: 'item', name: 'Afrique du Sud', page: 25, targetPage: 6 },
+  { type: 'section', name: 'Vins Rouges', targetPage: 7 },
+  { type: 'item', name: 'Bourgogne', page: 26, targetPage: 7 },
+  { type: 'item', name: 'Beaujolais', page: 30, targetPage: 7 },
+  { type: 'item', name: 'Alsace – Moselle – Jura', page: 32, targetPage: 7 },
+  { type: 'item', name: 'Bugey – Savoie – Isère', page: 33, targetPage: 7 },
+  { type: 'item', name: 'Auvergne – Loire', page: 33, targetPage: 7 },
+  { type: 'item', name: 'Sud-ouest et Bordelais', page: 35, targetPage: 7 },
+  { type: 'item', name: 'Rhône nord', page: 36, targetPage: 7 },
+  { type: 'item', name: 'Rhône sud', page: 37, targetPage: 7 },
+  { type: 'item', name: 'Provence', page: 37, targetPage: 7 },
+  { type: 'item', name: 'Corse – Languedoc – Roussillon', page: 38, targetPage: 7 },
+  { type: 'item', name: 'Allemagne', page: 39, targetPage: 7 },
+  { type: 'item', name: 'Danemark', page: 39, targetPage: 7 },
+  { type: 'item', name: 'Suisse', page: 39, targetPage: 7 },
+  { type: 'item', name: 'Autriche', page: 39, targetPage: 7 },
+  { type: 'item', name: 'Italie', page: 39, targetPage: 7 },
+  { type: 'item', name: 'Espagne', page: 40, targetPage: 7 },
+  { type: 'item', name: 'Portugal', page: 40, targetPage: 7 },
+  { type: 'item', name: 'Grèce', page: 41, targetPage: 7 },
+  { type: 'item', name: 'Géorgie', page: 41, targetPage: 7 },
+  { type: 'item', name: 'Etats-Unis', page: 41, targetPage: 7 },
+  { type: 'item', name: 'Argentine', page: 41, targetPage: 7 },
+  { type: 'item', name: 'Chili', page: 41, targetPage: 7 },
+  { type: 'item', name: 'Afrique du Sud', page: 42, targetPage: 7 },
+  { type: 'item', name: 'Australie – Nouvelle-Zélande', page: 42, targetPage: 7 },
+  { type: 'item', name: 'Japon', page: 42, targetPage: 7 },
+];
 
 // Sommaire officiel exhaustif extrait du document Word original (42 pages)
 interface TocSection {
@@ -532,84 +631,25 @@ const classifyWineRegion = (wine: Wine, color: 'blanc' | 'rouge' | 'rose' | 'bul
   return fallbackRegion;
 };
 
-// Watermark Component supporting both default compass vector and custom uploaded image
+// Watermark Component utilisant le filigrane officiel extrait du Word original
 const Watermark: React.FC<{ 
   logo: string | null; 
   opacity: number; 
   scale: number; 
 }> = ({ logo, opacity, scale }) => {
+  const watermarkSrc = logo || PREMNORD_WATERMARK_BASE64;
   return (
     <div 
       className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 select-none transition-all duration-300"
       style={{ opacity: opacity }}
     >
-      {logo ? (
-        <img 
-          src={logo} 
-          alt="Filigrane personnalisé" 
-          className="object-contain"
-          style={{ width: `${scale}%`, height: `${scale}%`, maxWidth: '550px', maxHeight: '550px' }}
-          referrerPolicy="no-referrer"
-        />
-      ) : (
-        <svg 
-          viewBox="0 0 400 400" 
-          className="text-[#A4513C] fill-none stroke-current" 
-          strokeWidth="1.2"
-          style={{ width: `${scale}%`, height: `${scale}%`, maxWidth: '500px', maxHeight: '500px' }}
-        >
-          <circle cx="200" cy="200" r="140" strokeDasharray="3 3" />
-          <circle cx="200" cy="200" r="110" />
-          <circle cx="200" cy="200" r="50" />
-          <circle cx="200" cy="200" r="20" />
-          
-          {/* Radial Compasses */}
-          <line x1="200" y1="30" x2="200" y2="370" strokeDasharray="2 2" />
-          <line x1="30" y1="200" x2="370" y2="200" strokeDasharray="2 2" />
-          <line x1="80" y1="80" x2="320" y2="320" strokeDasharray="2 2" />
-          <line x1="80" y1="320" x2="320" y2="80" strokeDasharray="2 2" />
-          
-          {/* Wine Glasses */}
-          <g transform="translate(200, 52) scale(0.65)" strokeWidth="2.2">
-            <path d="M-12,-15 C-12,5 12,5 12,-15 Z" />
-            <line x1="0" y1="0" x2="0" y2="25" />
-            <line x1="-8" y1="25" x2="8" y2="25" />
-          </g>
-          <g transform="translate(200, 348) rotate(180) scale(0.65)" strokeWidth="2.2">
-            <path d="M-12,-15 C-12,5 12,5 12,-15 Z" />
-            <line x1="0" y1="0" x2="0" y2="25" />
-            <line x1="-8" y1="25" x2="8" y2="25" />
-          </g>
-          <g transform="translate(348, 200) rotate(90) scale(0.65)" strokeWidth="2.2">
-            <path d="M-12,-15 C-12,5 12,5 12,-15 Z" />
-            <line x1="0" y1="0" x2="0" y2="25" />
-            <line x1="-8" y1="25" x2="8" y2="25" />
-          </g>
-          <g transform="translate(52, 200) rotate(-90) scale(0.65)" strokeWidth="2.2">
-            <path d="M-12,-15 C-12,5 12,5 12,-15 Z" />
-            <line x1="0" y1="0" x2="0" y2="25" />
-            <line x1="-8" y1="25" x2="8" y2="25" />
-          </g>
-          
-          {/* Forks */}
-          <g transform="translate(304, 96) rotate(45) scale(0.6)" strokeWidth="2.2">
-            <path d="M-6,-20 L-6,0 C-6,6 6,6 6,0 L6,-20 M-2,-20 L-2,0 M2,-20 L2,0" />
-            <line x1="0" y1="4" x2="0" y2="28" />
-          </g>
-          <g transform="translate(304, 304) rotate(135) scale(0.6)" strokeWidth="2.2">
-            <path d="M-6,-20 L-6,0 C-6,6 6,6 6,0 L6,-20 M-2,-20 L-2,0 M2,-20 L2,0" />
-            <line x1="0" y1="4" x2="0" y2="28" />
-          </g>
-          <g transform="translate(96, 304) rotate(225) scale(0.6)" strokeWidth="2.2">
-            <path d="M-6,-20 L-6,0 C-6,6 6,6 6,0 L6,-20 M-2,-20 L-2,0 M2,-20 L2,0" />
-            <line x1="0" y1="4" x2="0" y2="28" />
-          </g>
-          <g transform="translate(96, 96) rotate(315) scale(0.6)" strokeWidth="2.2">
-            <path d="M-6,-20 L-6,0 C-6,6 6,6 6,0 L6,-20 M-2,-20 L-2,0 M2,-20 L2,0" />
-            <line x1="0" y1="4" x2="0" y2="28" />
-          </g>
-        </svg>
-      )}
+      <img 
+        src={watermarkSrc} 
+        alt="Filigrane Premnord" 
+        className="object-contain"
+        style={{ width: `${scale}%`, height: `${scale}%`, maxWidth: '520px', maxHeight: '520px' }}
+        referrerPolicy="no-referrer"
+      />
     </div>
   );
 };
@@ -629,7 +669,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
   const [viewFormat, setViewFormat] = useState<'paginated' | 'printall'>('paginated');
   const [activePage, setActivePage] = useState<number>(1);
   const [showWatermark, setShowWatermark] = useState<boolean>(true);
-  const [watermarkOpacity, setWatermarkOpacity] = useState<number>(0.045);
+  const [watermarkOpacity, setWatermarkOpacity] = useState<number>(0.075);
   const [watermarkScale, setWatermarkScale] = useState<number>(75);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -1127,129 +1167,77 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
 
   // --- PAGE RENDERING MODULES ---
 
-  // Page 1: Couverture (Cover Page)
+  // Page 1: Couverture officielle minimaliste 100% ISO au document Word de l'Oncle
   const renderCoverPage = () => (
-    <div className="flex flex-col justify-between items-center h-full text-center py-[22mm] relative z-10 select-none">
-      <div className="mt-6 flex flex-col items-center">
-        {/* Blason / Logo officiel Premnord */}
-        <div className="mb-6">
-          <PremnordLogo size={56} color="#A4513C" />
-        </div>
-        <h1 className="text-[#A4513C] font-sans font-black tracking-[0.25em] text-4xl sm:text-5xl uppercase">
+    <div className="flex flex-col justify-between items-center h-full min-h-[580px] sm:min-h-[660px] text-center relative z-10 py-[12mm] px-[6mm] select-none">
+      <div className="w-full pt-16 sm:pt-28 flex flex-col items-center">
+        <h1 className="text-[#A4513C] font-sans font-black tracking-[0.25em] text-4xl sm:text-6xl uppercase leading-tight">
           PREMNORD
         </h1>
-        <div className="w-16 h-[2px] bg-[#A4513C]/40 mx-auto mt-4" />
-        <h2 className="text-[#A4513C] font-sans font-semibold tracking-[0.25em] text-lg sm:text-xl uppercase mt-4">
-          LIVRE DE CAVE
-        </h2>
+        <div className="mt-8 sm:mt-12">
+          <h2 className="text-[#A4513C] font-sans font-bold tracking-[0.25em] text-lg sm:text-2xl uppercase">
+            LIVRE DE CAVE
+          </h2>
+        </div>
       </div>
 
-      <div className="flex flex-col items-center my-6">
-        <div className="w-12 h-[1px] bg-[#A4513C]/30 my-3" />
-        <p className="font-sans italic text-stone-400 text-xs tracking-wider">
-          Restaurant Premnord &bull; Bourgogne
-        </p>
-      </div>
-
-      <div className="w-full max-w-sm space-y-3 px-6 text-[10px] font-sans tracking-[0.05em] uppercase text-stone-400">
-        <p className="font-medium text-stone-500">Prix nets, service compris</p>
-        <p className="text-[8.5px] leading-relaxed max-w-xs mx-auto">
-          L'abus d'alcool est dangereux pour la santé, à consommer avec modération
+      <div className="w-full pb-3 text-center">
+        <p className="text-[#A4513C]/75 font-sans text-[10px] sm:text-[11px] tracking-wider font-medium">
+          Prix nets, service compris
         </p>
       </div>
     </div>
   );
 
-  // Page 2: Table des Matières (Index officiel fidèle au document Word de l'oncle)
+  // Page 2: Sommaire officiel 2 colonnes sans pointillés, avec titres gris foncé Titre Case
   const renderTOCPage = () => {
-    const col1 = [OFFICIAL_TOC[0], OFFICIAL_TOC[1], OFFICIAL_TOC[2]];
-    const col2 = [OFFICIAL_TOC[3], OFFICIAL_TOC[4]];
+    const renderCol = (entries: TocEntry[]) => (
+      <div className="space-y-0.5">
+        {entries.map((entry, idx) => {
+          if (entry.type === 'section') {
+            return (
+              <div
+                key={`${entry.name}-${idx}`}
+                onClick={() => viewFormat === 'paginated' && setActivePage(entry.targetPage)}
+                className={`flex items-baseline justify-between font-sans font-bold text-[#334552] text-[12px] sm:text-[13px] ${
+                  idx > 0 ? 'pt-2.5 pb-0.5' : 'pb-0.5'
+                } cursor-pointer hover:text-[#A4513C] transition-colors`}
+              >
+                <span>{entry.name}</span>
+                {entry.page && (
+                  <span className="font-mono text-[11px] font-semibold text-[#334552]">
+                    p.{entry.page}
+                  </span>
+                )}
+              </div>
+            );
+          }
+          return (
+            <div
+              key={`${entry.name}-${idx}`}
+              onClick={() => viewFormat === 'paginated' && setActivePage(entry.targetPage)}
+              className="flex items-baseline justify-between text-[10.5px] sm:text-[11px] text-[#334552] pl-2 sm:pl-3 py-0.2 cursor-pointer hover:text-[#A4513C] transition-colors"
+            >
+              <span className="truncate pr-2">{entry.name}</span>
+              <span className="font-mono text-[9.5px] sm:text-[10px] text-[#334552]/75 shrink-0">
+                p.{entry.page}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
 
     return (
-      <div className="flex flex-col justify-between h-full py-[6mm] relative z-10 px-[3mm] sm:px-[5mm]">
-        <div>
-          <h2 className="text-center text-[#A4513C] font-sans font-black tracking-[0.25em] text-xl sm:text-2xl uppercase border-b border-[#A4513C]/20 pb-3 mb-5">
-            SOMMAIRE DU LIVRE DE CAVE
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 max-w-2xl mx-auto">
-            {/* Colonne 1 : Domaine Prieuré Roch, Effervescences, Vins Blancs */}
-            <div className="space-y-4">
-              {col1.map((sec) => (
-                <div key={sec.title} className="space-y-1">
-                  <div
-                    onClick={() => viewFormat === 'paginated' && setActivePage(sec.targetPage)}
-                    className="flex items-baseline justify-between border-b border-[#A4513C]/20 pb-0.5 cursor-pointer group"
-                  >
-                    <h3 className="font-sans font-black text-[#A4513C] text-[12px] sm:text-[12.5px] uppercase tracking-wider group-hover:translate-x-0.5 transition-transform">
-                      {sec.title}
-                    </h3>
-                    <span className="font-mono text-[11px] font-bold text-[#A4513C]">
-                      p.{sec.page}
-                    </span>
-                  </div>
-                  {sec.subItems && sec.subItems.length > 0 && (
-                    <div className="space-y-0.5 pl-1.5 pt-0.5">
-                      {sec.subItems.map((sub) => (
-                        <div
-                          key={sub.name}
-                          onClick={() => viewFormat === 'paginated' && setActivePage(sec.targetPage)}
-                          className="flex items-baseline justify-between py-0.2 text-[10.5px] text-[#334552] hover:text-[#A4513C] cursor-pointer group transition-colors"
-                        >
-                          <span className="truncate pr-1 group-hover:font-medium">{sub.name}</span>
-                          <span className="flex-grow border-b border-dotted border-stone-300 mx-1 self-baseline h-1" />
-                          <span className="font-mono text-[9.5px] text-stone-500 font-semibold shrink-0">
-                            p.{sub.page}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Colonne 2 : Vins Rosés, Vins Rouges */}
-            <div className="space-y-4">
-              {col2.map((sec) => (
-                <div key={sec.title} className="space-y-1">
-                  <div
-                    onClick={() => viewFormat === 'paginated' && setActivePage(sec.targetPage)}
-                    className="flex items-baseline justify-between border-b border-[#A4513C]/20 pb-0.5 cursor-pointer group"
-                  >
-                    <h3 className="font-sans font-black text-[#A4513C] text-[12px] sm:text-[12.5px] uppercase tracking-wider group-hover:translate-x-0.5 transition-transform">
-                      {sec.title}
-                    </h3>
-                    <span className="font-mono text-[11px] font-bold text-[#A4513C]">
-                      p.{sec.page}
-                    </span>
-                  </div>
-                  {sec.subItems && sec.subItems.length > 0 && (
-                    <div className="space-y-0.5 pl-1.5 pt-0.5">
-                      {sec.subItems.map((sub) => (
-                        <div
-                          key={sub.name}
-                          onClick={() => viewFormat === 'paginated' && setActivePage(sec.targetPage)}
-                          className="flex items-baseline justify-between py-0.2 text-[10.5px] text-[#334552] hover:text-[#A4513C] cursor-pointer group transition-colors"
-                        >
-                          <span className="truncate pr-1 group-hover:font-medium">{sub.name}</span>
-                          <span className="flex-grow border-b border-dotted border-stone-300 mx-1 self-baseline h-1" />
-                          <span className="font-mono text-[9.5px] text-stone-500 font-semibold shrink-0">
-                            p.{sub.page}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+      <div className="flex flex-col justify-between h-full py-[4mm] relative z-10 px-[2mm] sm:px-[4mm]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 max-w-2xl mx-auto w-full">
+          <div>{renderCol(TOC_COLUMN_1)}</div>
+          <div>{renderCol(TOC_COLUMN_2)}</div>
         </div>
 
-        <div className="mt-3 pt-2 border-t border-stone-100 flex justify-between items-baseline font-sans text-[7.5px] sm:text-[8px] font-medium text-stone-400 uppercase tracking-wider">
-          <span className="truncate max-w-[75%]">L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
-          <span className="font-mono font-bold">p.2</span>
+        <div className="mt-4 pt-2 border-t border-stone-100/50 flex justify-between items-baseline font-sans text-[7.5px] sm:text-[8px] text-stone-400">
+          <span>Prix nets, service compris</span>
+          <span className="font-mono font-medium">p.2</span>
         </div>
       </div>
     );
@@ -1265,14 +1253,19 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     return (
       <div className="flex flex-col justify-between h-full relative z-10 px-[5mm] py-[5mm]">
         <div>
-          <div className="text-center mb-8">
-            <h2 className="text-[#A4513C] font-sans font-medium tracking-[0.25em] text-xl sm:text-2xl uppercase leading-tight">
+          {/* Header 75cl / 150cl colonnes de prix en haut à droite */}
+          <div className="flex justify-end gap-3 font-mono text-[11px] font-bold text-[#A4513C] uppercase mb-1">
+            <span className="w-16 text-right pr-1">75 cl</span>
+            <span className="w-16 text-right pr-1">150 cl</span>
+          </div>
+
+          <div className="text-center mb-6">
+            <h2 className="text-[#A4513C] font-sans font-bold tracking-[0.2em] text-xl sm:text-2xl uppercase leading-tight">
               DOMAINE PRIEURE ROCH
             </h2>
-            <p className="text-stone-400 font-sans italic text-[11px] mt-1.5 tracking-wide">
+            <p className="text-[#334552] font-sans italic text-[11px] mt-1 tracking-wide">
               Par Henry-Frédéric Roch depuis 1988
             </p>
-            <div className="w-12 h-[1px] bg-[#A4513C]/30 mx-auto mt-4" />
           </div>
 
           {totalDPRCount === 0 ? (
@@ -1280,11 +1273,11 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               Aucune référence du Domaine Prieuré Roch disponible actuellement.
             </p>
           ) : (
-            <div className="space-y-6 pr-1">
+            <div className="space-y-5 pr-1">
               {/* Blancs */}
               {bWines.length > 0 && (
                 <div>
-                  <h3 className="text-[#A4513C] font-sans font-bold tracking-[0.1em] text-[12px] uppercase border-b border-[#A4513C]/20 pb-0.5 mb-2 italic">
+                  <h3 className="text-[#A4513C] font-sans font-bold tracking-[0.08em] text-[13px] uppercase mb-1.5">
                     Blancs
                   </h3>
                   <div className="space-y-0.5">
@@ -1296,7 +1289,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               {/* Rosés */}
               {rRoseWines.length > 0 && (
                 <div>
-                  <h3 className="text-[#A4513C] font-sans font-bold tracking-[0.1em] text-[12px] uppercase border-b border-[#A4513C]/20 pb-0.5 mb-2 italic">
+                  <h3 className="text-[#A4513C] font-sans font-bold tracking-[0.08em] text-[13px] uppercase mb-1.5 mt-3">
                     Rosés
                   </h3>
                   <div className="space-y-0.5">
@@ -1308,7 +1301,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               {/* Rouges */}
               {rRougeWines.length > 0 && (
                 <div>
-                  <h3 className="text-[#A4513C] font-sans font-bold tracking-[0.1em] text-[12px] uppercase border-b border-[#A4513C]/20 pb-0.5 mb-2 italic">
+                  <h3 className="text-[#A4513C] font-sans font-bold tracking-[0.08em] text-[13px] uppercase mb-1.5 mt-3">
                     Rouges
                   </h3>
                   <div className="space-y-0.5">
@@ -1320,10 +1313,10 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           )}
         </div>
 
-        {/* Legend footnotes typical of great cellars */}
+        {/* Legend footnote fidèle au document Word */}
         <div className="flex justify-between items-baseline border-t border-stone-100 pt-2 mt-4 font-sans text-[7.5px] sm:text-[8px] font-medium text-stone-400 uppercase tracking-wider">
-          <span className="truncate max-w-[75%]">L'abus d'alcool est dangereux pour la santé • * Limité à 1 flacon / table</span>
-          <span className="font-mono font-bold">p.3</span>
+          <span className="truncate max-w-[75%]">* Référence limitée à une bouteille par table</span>
+          <span className="font-mono font-bold text-[#A4513C]">p.3</span>
         </div>
       </div>
     );
@@ -1495,22 +1488,14 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     }
   };
 
-  // Génération du document HTML complet autonome pour un export PDF / impression 100% fidèle au document Word
+  // Génération du document HTML complet autonome 100% ISO au document Word original
   const generatePrintHtml = (): string => {
-    const watermarkSvg = watermarkLogo ? `
-      <img src="${watermarkLogo}" alt="Filigrane" style="width: ${watermarkScale * 5}px; max-width: 80vw; max-height: 80vh; object-fit: contain;" />
-    ` : `
-      <svg viewBox="0 0 400 400" fill="none" stroke="#A4513C" stroke-width="1.2" style="width: ${watermarkScale * 5}px; max-width: 500px; max-height: 500px;">
-        <circle cx="200" cy="200" r="140" stroke-dasharray="3 3" />
-        <circle cx="200" cy="200" r="110" />
-        <circle cx="200" cy="200" r="50" />
-        <circle cx="200" cy="200" r="20" />
-        <line x1="200" y1="30" x2="200" y2="370" stroke-dasharray="2 2" />
-        <line x1="30" y1="200" x2="370" y2="200" stroke-dasharray="2 2" />
-        <line x1="80" y1="80" x2="320" y2="320" stroke-dasharray="2 2" />
-        <line x1="80" y1="320" x2="320" y2="80" stroke-dasharray="2 2" />
-      </svg>
-    `;
+    const watermarkBase64 = watermarkLogo || PREMNORD_WATERMARK_BASE64;
+    const watermarkImgHtml = showWatermark ? `
+      <div class="watermark-layer">
+        <img src="${watermarkBase64}" alt="Filigrane Premnord" class="watermark-img" />
+      </div>
+    ` : '';
 
     const renderWineLineHtml = (cw: CoupledWineReference) => {
       const vintage = cw.vintage || 'S.A.';
@@ -1580,29 +1565,23 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
       getRegionOrderIndex(a, ROUGES_ORDER) - getRegionOrderIndex(b, ROUGES_ORDER)
     );
 
-    const col1 = [OFFICIAL_TOC[0], OFFICIAL_TOC[1], OFFICIAL_TOC[2]];
-    const col2 = [OFFICIAL_TOC[3], OFFICIAL_TOC[4]];
-
-    const renderTocColHtml = (sections: TocSection[]) => {
-      return sections.map(sec => `
-        <div style="margin-bottom: 16px;">
-          <div class="toc-section-head">
-            <span class="toc-title">${sec.title}</span>
-            <span class="toc-pnum">p.${sec.page}</span>
-          </div>
-          ${sec.subItems && sec.subItems.length > 0 ? `
-            <div style="padding-left: 6px;">
-              ${sec.subItems.map(sub => `
-                <div class="toc-item">
-                  <span>${sub.name}</span>
-                  <span class="toc-dots"></span>
-                  <span class="toc-item-pnum">p.${sub.page}</span>
-                </div>
-              `).join('')}
+    const renderTocColHtml = (entries: TocEntry[]) => {
+      return entries.map((entry, idx) => {
+        if (entry.type === 'section') {
+          return `
+            <div class="toc-section-head ${idx > 0 ? 'mt-head' : ''}">
+              <span class="toc-title">${entry.name}</span>
+              ${entry.page ? `<span class="toc-pnum">p.${entry.page}</span>` : ''}
             </div>
-          ` : ''}
-        </div>
-      `).join('');
+          `;
+        }
+        return `
+          <div class="toc-item">
+            <span class="toc-item-name">${entry.name}</span>
+            <span class="toc-item-pnum">p.${entry.page}</span>
+          </div>
+        `;
+      }).join('');
     };
 
     return `<!DOCTYPE html>
@@ -1620,6 +1599,10 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    @page {
+      size: A4 portrait;
+      margin: 15mm 20mm;
+    }
     @media screen {
       .print-toolbar {
         position: sticky;
@@ -1628,7 +1611,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
         right: 0;
         background: #1c1917;
         color: white;
-        padding: 14px 28px;
+        padding: 12px 24px;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -1648,181 +1631,223 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
         align-items: center;
         gap: 8px;
         box-shadow: 0 2px 6px rgba(164, 81, 60, 0.4);
-        transition: background 0.15s;
       }
       .btn-print:hover { background: #8e4331; }
       .btn-close {
-        background: transparent;
-        color: #a8a29e;
-        border: 1px solid #57534e;
-        padding: 7px 16px;
+        background: #292524;
+        color: #d6d3d1;
+        font-size: 12px;
+        padding: 8px 16px;
+        border: 1px solid #44403c;
         border-radius: 6px;
         cursor: pointer;
-        font-size: 12px;
       }
-      .btn-close:hover { color: white; border-color: #78716c; }
-      .tip-text { font-size: 11px; color: #d6d3d1; }
-      .book-container {
-        max-width: 820px;
-        margin: 30px auto;
-        background: white;
-        box-shadow: 0 8px 30px rgba(0,0,0,0.08);
-        border-radius: 12px;
-        padding: 50px 60px;
+      .btn-close:hover { background: #44403c; color: white; }
+      .tip-text { font-size: 12px; color: #a8a29e; }
+      .book-page {
+        background: #FFFFFF;
+        max-width: 210mm;
+        min-height: 297mm;
+        margin: 24px auto;
+        padding: 15mm 20mm;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
         position: relative;
-      }
-      .page-break {
-        border-bottom: 2px dashed #e7e5e4;
-        margin: 45px 0;
-        position: relative;
-      }
-      .page-break::after {
-        content: 'Saut de page';
-        position: absolute;
-        right: 0;
-        top: -10px;
-        background: #f5f5f4;
-        color: #a8a29e;
-        font-size: 10px;
-        padding: 1px 8px;
-        border-radius: 4px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
       }
     }
     @media print {
-      @page {
-        size: A4 portrait;
-        margin: 15mm 20mm 15mm 20mm;
-      }
       body { background: #FFFFFF !important; }
       .no-print { display: none !important; }
-      .book-container {
-        max-width: 100% !important;
+      .book-page {
+        background: #FFFFFF !important;
         margin: 0 !important;
         padding: 0 !important;
         box-shadow: none !important;
-        border-radius: 0 !important;
-      }
-      .page-break {
+        border: none !important;
+        min-height: 265mm !important;
         page-break-after: always !important;
         break-after: page !important;
-        height: 0 !important;
-        margin: 0 !important;
-        border: none !important;
-        visibility: hidden !important;
+        position: relative !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
       }
     }
+
+    /* Filigrane officiel sur chaque page */
     .watermark-layer {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      opacity: ${watermarkOpacity};
-      pointer-events: none;
-      z-index: 0;
+      position: absolute;
+      inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
+      pointer-events: none;
+      z-index: 0;
     }
-    .book-content { position: relative; z-index: 1; }
-    .cover-page {
-      min-height: 250mm;
+    .watermark-img {
+      opacity: ${watermarkOpacity};
+      width: ${watermarkScale}%;
+      max-width: 520px;
+      max-height: 520px;
+      object-fit: contain;
+    }
+    .page-inner {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      flex-grow: 1;
+    }
+
+    /* 1. Couverture Minimaliste Officielle Word */
+    .cover-content {
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       align-items: center;
       text-align: center;
-      padding: 30mm 0 15mm 0;
+      height: 100%;
+      min-height: 260mm;
+      padding: 30mm 0 10mm 0;
+    }
+    .cover-titles {
+      padding-top: 40px;
     }
     .cover-brand {
       color: #A4513C;
-      font-size: 44px;
+      font-size: 54px;
       font-weight: 900;
       letter-spacing: 0.25em;
       text-transform: uppercase;
-      margin-top: 18px;
-    }
-    .cover-divider {
-      width: 60px;
-      height: 2px;
-      background-color: rgba(164, 81, 60, 0.4);
-      margin: 16px auto;
+      margin-bottom: 28px;
     }
     .cover-doc {
       color: #A4513C;
-      font-size: 20px;
-      font-weight: 600;
+      font-size: 22px;
+      font-weight: 700;
       letter-spacing: 0.25em;
       text-transform: uppercase;
     }
-    .cover-subline {
-      width: 48px;
-      height: 1px;
-      background-color: rgba(164, 81, 60, 0.3);
-      margin: 12px auto;
-    }
-    .cover-location {
-      font-style: italic;
-      color: #a8a29e;
-      font-size: 13px;
-      letter-spacing: 0.05em;
-    }
     .cover-footer {
-      max-width: 360px;
-      font-size: 10px;
+      font-size: 11px;
+      color: rgba(164, 81, 60, 0.75);
       letter-spacing: 0.05em;
-      text-transform: uppercase;
-      color: #a8a29e;
+      padding-bottom: 10px;
     }
-    .cover-tax {
+
+    /* 2. Sommaire 2 colonnes sans pointillés Word */
+    .toc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      margin-top: 10px;
+      margin-bottom: 20px;
+    }
+    .toc-section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-weight: 700;
+      font-size: 13px;
+      color: #334552;
+      padding-bottom: 2px;
+    }
+    .toc-section-head.mt-head {
+      margin-top: 10px;
+    }
+    .toc-title {
+      font-weight: 700;
+      color: #334552;
+    }
+    .toc-pnum {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 11px;
       font-weight: 600;
-      color: #78716c;
+      color: #334552;
+    }
+    .toc-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 11px;
+      color: #334552;
+      padding: 1.5px 0 1.5px 10px;
+    }
+    .toc-item-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .toc-item-pnum {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 10px;
+      color: rgba(51, 69, 82, 0.8);
+      font-weight: 500;
+    }
+
+    /* 3. Pages de Vins */
+    .price-header-row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: #A4513C;
+      text-transform: uppercase;
       margin-bottom: 6px;
     }
-    .cover-warning { font-size: 8.5px; line-height: 1.4; }
+    .price-header-col {
+      width: 65px;
+      text-align: right;
+      padding-right: 4px;
+    }
     .section-title {
       color: #A4513C;
       font-size: 24px;
       font-weight: 700;
-      letter-spacing: 0.22em;
+      letter-spacing: 0.2em;
       text-transform: uppercase;
       text-align: center;
-      margin-bottom: 22px;
+      margin-bottom: 18px;
       break-after: avoid;
       page-break-after: avoid;
     }
     .section-subtitle {
-      color: #a8a29e;
+      color: #334552;
       font-style: italic;
-      font-size: 12px;
+      font-size: 11px;
       text-align: center;
-      margin-top: -14px;
-      margin-bottom: 24px;
+      margin-top: -12px;
+      margin-bottom: 20px;
     }
     .category-title {
-      color: #A4513C;
-      font-size: 14px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      border-bottom: 1px solid rgba(164, 81, 60, 0.25);
-      padding-bottom: 3px;
-      margin-bottom: 8px;
-      font-style: italic;
-      break-after: avoid;
-      page-break-after: avoid;
-    }
-    .subregion-block { margin-top: 20px; margin-bottom: 8px; }
-    .subregion-title {
       color: #A4513C;
       font-size: 13.5px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.12em;
-      border-bottom: 1px solid rgba(164, 81, 60, 0.25);
-      padding-bottom: 3px;
-      margin-bottom: 10px;
+      letter-spacing: 0.08em;
+      margin-top: 14px;
+      margin-bottom: 6px;
+      break-after: avoid;
+      page-break-after: avoid;
+    }
+    .subregion-block {
+      margin-top: 14px;
+      margin-bottom: 8px;
+    }
+    .subregion-title {
+      color: #A4513C;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-top: 8px;
+      margin-bottom: 6px;
       break-after: avoid;
       page-break-after: avoid;
     }
@@ -1833,7 +1858,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     }
     .domain-title {
       color: #554039;
-      font-size: 15px;
+      font-size: 14.5px;
       font-weight: 700;
       margin-bottom: 4px;
       break-after: avoid;
@@ -1852,7 +1877,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     .wine-vintage {
       width: 58px;
       flex-shrink: 0;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
       font-size: 12px;
       font-weight: 600;
       font-style: italic;
@@ -1873,9 +1898,9 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     }
     .wine-prices {
       display: flex;
-      gap: 16px;
+      gap: 12px;
       flex-shrink: 0;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
       font-size: 13px;
       font-weight: 700;
       margin-left: auto;
@@ -1884,13 +1909,14 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
       width: 65px;
       text-align: right;
       color: #334552;
+      padding-right: 4px;
     }
     .page-footer {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      border-top: 1px solid #f5f5f4;
-      padding-top: 8px;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      padding-top: 6px;
       margin-top: 16px;
       font-size: 8px;
       text-transform: uppercase;
@@ -1902,55 +1928,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     .page-num {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
       font-weight: 700;
-    }
-    .toc-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 28px;
-      margin-top: 20px;
-      margin-bottom: 24px;
-    }
-    .toc-section-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      border-bottom: 1px solid rgba(164, 81, 60, 0.25);
-      padding-bottom: 3px;
-      margin-top: 12px;
-      margin-bottom: 6px;
-    }
-    .toc-title {
       color: #A4513C;
-      font-size: 12.5px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-    .toc-pnum {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
-      font-size: 11px;
-      font-weight: 700;
-      color: #A4513C;
-    }
-    .toc-item {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      font-size: 10.5px;
-      color: #334552;
-      padding: 1.5px 0 1.5px 6px;
-    }
-    .toc-dots {
-      flex-grow: 1;
-      border-bottom: 1px dotted #d6d3d1;
-      margin: 0 6px;
-      transform: translateY(-2px);
-    }
-    .toc-item-pnum {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
-      font-size: 9.5px;
-      font-weight: 600;
-      color: #78716c;
     }
   </style>
 </head>
@@ -1958,10 +1936,10 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
   <div class="no-print print-toolbar">
     <div style="display: flex; align-items: center; gap: 14px;">
       <button onclick="window.print()" class="btn-print">
-        🖨️ Lancer l'impression / Enregistrer en PDF
+        🖨️ Lancer l'impression / Enregistrer en PDF (A4)
       </button>
       <span class="tip-text">
-        💡 Conseil d'export : cochez <strong>"Graphiques d'arrière-plan"</strong> et décochez <strong>"En-têtes et pieds de page"</strong> dans la boîte d'impression.
+        💡 Conseil : Cochez <strong>"Graphiques d'arrière-plan"</strong> dans la boîte d'impression pour voir le filigrane.
       </span>
     </div>
     <button onclick="window.close()" class="btn-close">
@@ -1970,144 +1948,187 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
   </div>
 
   <div class="book-container">
-    ${showWatermark ? `<div class="watermark-layer">${watermarkSvg}</div>` : ''}
-    <div class="book-content">
-      <!-- 1. Couverture -->
-      <div class="cover-page">
-        <div>
-          <div>
-            <svg viewBox="0 0 100 100" width="60" height="60" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="50" cy="40" r="28" fill="#A4513C" />
-              <circle cx="62" cy="28" r="3" fill="#FAF8F5" />
-              <circle cx="38" cy="35" r="3" fill="#FAF8F5" />
-              <circle cx="50" cy="43" r="3" fill="#A4513C" opacity="0.3" />
-              <circle cx="65" cy="48" r="3" fill="#FAF8F5" />
-              <circle cx="56" cy="58" r="3" fill="#FAF8F5" />
-              <circle cx="38" cy="50" r="3" fill="#FAF8F5" />
-              <rect x="48" y="65" width="4" height="12" fill="#A4513C" />
-              <path d="M26 77H74L71 93H29L26 77Z" fill="#A4513C" />
-            </svg>
-          </div>
+    <!-- 1. Couverture -->
+    <div class="book-page">
+      ${watermarkImgHtml}
+      <div class="cover-content">
+        <div class="cover-titles">
           <h1 class="cover-brand">PREMNORD</h1>
-          <div class="cover-divider"></div>
           <h2 class="cover-doc">LIVRE DE CAVE</h2>
         </div>
-        <div>
-          <div class="cover-subline"></div>
-          <p class="cover-location">Restaurant Premnord &bull; Bourgogne</p>
-        </div>
         <div class="cover-footer">
-          <p class="cover-tax">Prix nets, service compris</p>
-          <p class="cover-warning">L'abus d'alcool est dangereux pour la santé, à consommer avec modération</p>
+          <p>Prix nets, service compris</p>
         </div>
       </div>
-      <div class="page-break"></div>
+    </div>
 
-      <!-- 2. Sommaire -->
-      <div>
-        <h2 class="section-title">SOMMAIRE DU LIVRE DE CAVE</h2>
-        <div class="toc-grid">
-          <div>${renderTocColHtml(col1)}</div>
-          <div>${renderTocColHtml(col2)}</div>
+    <!-- 2. Sommaire -->
+    <div class="book-page">
+      ${watermarkImgHtml}
+      <div class="page-inner">
+        <div>
+          <div class="toc-grid">
+            <div>${renderTocColHtml(TOC_COLUMN_1)}</div>
+            <div>${renderTocColHtml(TOC_COLUMN_2)}</div>
+          </div>
         </div>
         <div class="page-footer">
-          <span>L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
+          <span>Prix nets, service compris</span>
           <span class="page-num">p.2</span>
         </div>
       </div>
-      <div class="page-break"></div>
+    </div>
 
-      <!-- 3. Domaine Prieuré Roch -->
-      <div>
-        <div class="section-header">
-          <h2 class="section-title">DOMAINE PRIEURE ROCH</h2>
-          <p class="section-subtitle">Par Henry-Frédéric Roch depuis 1988</p>
+    <!-- 3. Domaine Prieuré Roch -->
+    <div class="book-page">
+      ${watermarkImgHtml}
+      <div class="page-inner">
+        <div>
+          <div class="price-header-row">
+            <span class="price-header-col">75 cl</span>
+            <span class="price-header-col">150 cl</span>
+          </div>
+          <div class="section-header">
+            <h2 class="section-title">DOMAINE PRIEURE ROCH</h2>
+            <p class="section-subtitle">Par Henry-Frédéric Roch depuis 1988</p>
+          </div>
+          ${bWines.length > 0 ? `
+            <h3 class="category-title">Blancs</h3>
+            <div style="margin-bottom: 12px;">${bWines.map(renderWineLineHtml).join('')}</div>
+          ` : ''}
+          ${rRoseWines.length > 0 ? `
+            <h3 class="category-title">Rosés</h3>
+            <div style="margin-bottom: 12px;">${rRoseWines.map(renderWineLineHtml).join('')}</div>
+          ` : ''}
+          ${rRougeWines.length > 0 ? `
+            <h3 class="category-title">Rouges</h3>
+            <div style="margin-bottom: 12px;">${rRougeWines.map(renderWineLineHtml).join('')}</div>
+          ` : ''}
         </div>
-        ${bWines.length > 0 ? `
-          <h3 class="category-title">Blancs</h3>
-          <div style="margin-bottom: 14px;">${bWines.map(renderWineLineHtml).join('')}</div>
-        ` : ''}
-        ${rRoseWines.length > 0 ? `
-          <h3 class="category-title" style="margin-top: 18px;">Rosés</h3>
-          <div style="margin-bottom: 14px;">${rRoseWines.map(renderWineLineHtml).join('')}</div>
-        ` : ''}
-        ${rRougeWines.length > 0 ? `
-          <h3 class="category-title" style="margin-top: 18px;">Rouges</h3>
-          <div style="margin-bottom: 14px;">${rRougeWines.map(renderWineLineHtml).join('')}</div>
-        ` : ''}
         <div class="page-footer">
-          <span>L'abus d'alcool est dangereux pour la santé • * Limité à 1 flacon / table</span>
+          <span>* Référence limitée à une bouteille par table</span>
           <span class="page-num">p.3</span>
         </div>
       </div>
-      <div class="page-break"></div>
+    </div>
 
-      <!-- 4. Effervescences -->
-      <div>
-        <h2 class="section-title">EFFERVESCENCES</h2>
-        ${effCategories.map(cat => renderSubRegionGroupHtml(cat, structuredData.bulle[cat])).join('')}
+    <!-- 4. Effervescences -->
+    <div class="book-page">
+      ${watermarkImgHtml}
+      <div class="page-inner">
+        <div>
+          <div class="price-header-row">
+            <span class="price-header-col">75 cl</span>
+            <span class="price-header-col">150 cl</span>
+          </div>
+          <h2 class="section-title">EFFERVESCENCES</h2>
+          ${effCategories.map(cat => renderSubRegionGroupHtml(cat, structuredData.bulle[cat])).join('')}
+        </div>
         <div class="page-footer">
-          <span>L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
+          <span>Prix nets, service compris • L'abus d'alcool est dangereux pour la santé, à consommer avec modération</span>
           <span class="page-num">p.6</span>
         </div>
       </div>
-      <div class="page-break"></div>
+    </div>
 
-      <!-- 5. Vins Blancs -->
-      <div>
-        <h2 class="section-title">VINS BLANCS</h2>
-        ${blancCategories.map(cat => renderSubRegionGroupHtml(cat, structuredData.blanc[cat])).join('')}
+    <!-- 5. Vins Blancs -->
+    <div class="book-page">
+      ${watermarkImgHtml}
+      <div class="page-inner">
+        <div>
+          <div class="price-header-row">
+            <span class="price-header-col">75 cl</span>
+            <span class="price-header-col">150 cl</span>
+          </div>
+          <h2 class="section-title">VINS BLANCS</h2>
+          ${blancCategories.map(cat => renderSubRegionGroupHtml(cat, structuredData.blanc[cat])).join('')}
+        </div>
         <div class="page-footer">
-          <span>L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
+          <span>Prix nets, service compris • L'abus d'alcool est dangereux pour la santé, à consommer avec modération</span>
           <span class="page-num">p.10</span>
         </div>
       </div>
-      <div class="page-break"></div>
+    </div>
 
-      <!-- 6. Vins Rosés -->
-      <div>
-        <h2 class="section-title">VINS ROSÉS</h2>
-        ${roseCategories.map(cat => renderSubRegionGroupHtml(cat, structuredData.rose[cat])).join('')}
+    <!-- 6. Vins Rosés -->
+    <div class="book-page">
+      ${watermarkImgHtml}
+      <div class="page-inner">
+        <div>
+          <div class="price-header-row">
+            <span class="price-header-col">75 cl</span>
+            <span class="price-header-col">150 cl</span>
+          </div>
+          <h2 class="section-title">VINS ROSÉS</h2>
+          ${roseCategories.map(cat => renderSubRegionGroupHtml(cat, structuredData.rose[cat])).join('')}
+        </div>
         <div class="page-footer">
-          <span>L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
+          <span>Prix nets, service compris • L'abus d'alcool est dangereux pour la santé, à consommer avec modération</span>
           <span class="page-num">p.25</span>
         </div>
       </div>
-      <div class="page-break"></div>
+    </div>
 
-      <!-- 7. Vins Rouges -->
-      <div>
-        <h2 class="section-title">VINS ROUGES</h2>
-        ${rougeCategories.map(cat => renderSubRegionGroupHtml(cat, structuredData.rouge[cat])).join('')}
+    <!-- 7. Vins Rouges -->
+    <div class="book-page">
+      ${watermarkImgHtml}
+      <div class="page-inner">
+        <div>
+          <div class="price-header-row">
+            <span class="price-header-col">75 cl</span>
+            <span class="price-header-col">150 cl</span>
+          </div>
+          <h2 class="section-title">VINS ROUGES</h2>
+          ${rougeCategories.map(cat => renderSubRegionGroupHtml(cat, structuredData.rouge[cat])).join('')}
+        </div>
         <div class="page-footer">
-          <span>L'abus d'alcool est dangereux pour la santé, à consommer avec modération • Prix nets</span>
+          <span>Prix nets, service compris • L'abus d'alcool est dangereux pour la santé, à consommer avec modération</span>
           <span class="page-num">p.26</span>
         </div>
       </div>
     </div>
   </div>
-
-  <script>
-    window.addEventListener('load', function() {
-      setTimeout(function() {
-        window.print();
-      }, 450);
-    });
-  </script>
 </body>
 </html>`;
   };
 
-  const handleExportPrint = () => {
+  // Export 1: Impression directe par iframe cachée (aucun blocage pop-up navigateur)
+  const handleDirectIframePrint = () => {
     const html = generatePrintHtml();
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert("Le navigateur a bloqué l'ouverture du nouvel onglet d'export. Veuillez autoriser les fenêtres pop-up pour cette page, ou utiliser le bouton d'impression directe.");
-      return;
+    let iframe = document.getElementById('premnord-print-iframe') as HTMLIFrameElement;
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'premnord-print-iframe';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.visibility = 'hidden';
+      document.body.appendChild(iframe);
     }
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      }, 500);
+    }
+  };
+
+  // Export 2: Ouverture dans un nouvel onglet autonome via Blob URL (compatible Safari & Chrome)
+  const handleOpenNewTabBlob = () => {
+    const html = generatePrintHtml();
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      alert("Le navigateur a bloqué l'ouverture de l'onglet. Veuillez utiliser le bouton principal 'Imprimer / Exporter en PDF (A4)'.");
+    }
   };
 
   return (
@@ -2407,23 +2428,26 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           </div>
         )}
 
-        {/* Action Buttons: Bulletproof Standalone Export & Print */}
+        {/* Action Buttons: 2 Méthodes Robuste d'Exportation & Impression */}
         <div className="space-y-2.5">
+          {/* Méthode 1: Impression directe par iframe (aucun pop-up bloqué) */}
           <button
-            onClick={handleExportPrint}
+            onClick={handleDirectIframePrint}
             className="w-full h-12 bg-[#A4513C] hover:bg-[#8e4331] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer uppercase tracking-wider font-sans"
-            title="Ouvre un export haute fidélité dans un nouvel onglet et lance l'impression/PDF"
+            title="Lance l'impression PDF directement dans le navigateur sans blocage popup"
           >
             <Printer className="w-4 h-4" />
-            Imprimer / Exporter PDF
+            Imprimer / Exporter en PDF (A4)
           </button>
 
+          {/* Méthode 2: Nouvel onglet autonome via Blob URL */}
           <button
-            onClick={handleExportPrint}
+            onClick={handleOpenNewTabBlob}
             className="w-full h-9 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer font-sans"
+            title="Ouvre le livre de cave complet dans un onglet indépendant"
           >
             <ExternalLink className="w-3.5 h-3.5 text-stone-500" />
-            Ouvrir l'export dans un nouvel onglet
+            Ouvrir dans un nouvel onglet
           </button>
         </div>
 
