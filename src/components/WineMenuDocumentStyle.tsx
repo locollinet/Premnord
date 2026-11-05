@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useDeferredValue } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Wine } from '../types';
 import { PREMNORD_WATERMARK_BASE64 } from '../assets/watermarkBase64';
@@ -11,19 +11,13 @@ import {
 } from '../data/officialWordMenuData';
 import { 
   Printer, 
-  ChevronLeft, 
-  ChevronRight, 
   BookOpen, 
   Eye, 
   EyeOff, 
   Search, 
-  Filter, 
-  Sparkles,
   ExternalLink,
-  Layers,
   X,
-  FileText,
-  Info
+  FileText
 } from 'lucide-react';
 
 export interface WineMenuDocumentStyleProps {
@@ -46,6 +40,15 @@ const isDPRString = (str: string): boolean => {
   const norm = normalizeText(str);
   return norm.includes('prieure') || norm.includes('roch') || norm === 'dpr';
 };
+
+// Interface pour les métadonnées de stock pré-calculées O(1)
+interface LiveWineData {
+  matchedWine?: Wine;
+  stock75: number;
+  stock150: number;
+  totalStock: number;
+  isHidden: boolean;
+}
 
 // Sommaire officiel 100% ISO au document Word carte_vins_2026_10_29.docx
 interface SommaireEntry {
@@ -129,7 +132,7 @@ const SOMMAIRE_COL_2: SommaireEntry[] = [
 export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ onSelectWine }) => {
   const { wines, updateWine } = useFirebase();
 
-  // Contrôles Métier Essentiels (Aucun slider superflu)
+  // Contrôles Métier
   const [selectedSection, setSelectedSection] = useState<'couverture' | 'sommaire' | 'dpr' | 'bulle' | 'blanc' | 'rose' | 'rouge'>('dpr');
   const [viewMode, setViewMode] = useState<'chapitre' | 'tout_defiler'>('chapitre');
   const [stockFilter, setStockFilter] = useState<'tous' | 'en_stock'>('tous');
@@ -139,101 +142,154 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
   const [editMode, setEditMode] = useState<boolean>(false);
   const [hiddenWines, setHiddenWines] = useState<Record<string, boolean>>({});
 
+  // Optimisation réactivité : Recherche différée non-bloquante
+  const deferredSearch = useDeferredValue(searchQuery);
+
   // Détection Iframe
   const [isInIframe, setIsInIframe] = useState<boolean>(false);
   useEffect(() => {
     setIsInIframe(window.self !== window.top);
   }, []);
 
-  // Map des vins Firebase indexés pour recherche rapide et calcul de stock
-  const firebaseWineIndex = useMemo(() => {
-    const map = new Map<string, Wine>();
-    if (!wines) return map;
+  // 1. Indexation Firebase ultra-rapide en un seul passage (Exclusion des spiritueux garantie)
+  const liveStockCache = useMemo(() => {
+    const cache = new Map<string, LiveWineData>();
+    if (!wines || wines.length === 0) return cache;
 
-    // Règle Oncle : EXCLURE STRICTEMENT les spiritueux et softs de la carte des vins
+    // Filtre strict : AUCUN spiritueux ni soft
     const wineList = wines.filter(w => w.color !== 'spiritueux' && w.color !== 'soft');
 
-    wineList.forEach(w => {
-      const dNorm = normalizeText(w.domain);
-      const isDPR = isDPRString(w.domain || '');
-      const vNorm = (w.vintage || '').toString().trim();
-      const nNorm = normalizeText(w.name || '');
-      const cNorm = normalizeText(w.cuvee || '');
+    // Indexation multi-clefs pour accès instantané O(1)
+    const exactMap = new Map<string, Wine>();
+    const domainVintageMap = new Map<string, Wine[]>();
 
-      // Clefs d'indexation
-      const keyDomain = isDPR ? 'dpr' : dNorm;
-      if (keyDomain && vNorm && (nNorm || cNorm)) {
-        map.set(`${keyDomain}_${vNorm}_${nNorm}`, w);
-        if (cNorm && cNorm !== nNorm) {
-          map.set(`${keyDomain}_${vNorm}_${cNorm}`, w);
-        }
+    wineList.forEach(w => {
+      const isDPR = isDPRString(w.domain || '');
+      const dKey = isDPR ? 'dpr' : normalizeText(w.domain);
+      const vKey = (w.vintage || '').toString().trim();
+      const nKey = normalizeText(w.name || '');
+      const cKey = normalizeText(w.cuvee || '');
+
+      if (dKey && vKey) {
+        if (nKey) exactMap.set(`${dKey}_${vKey}_${nKey}`, w);
+        if (cKey && cKey !== nKey) exactMap.set(`${dKey}_${vKey}_${cKey}`, w);
+
+        const dvKey = `${dKey}_${vKey}`;
+        if (!domainVintageMap.has(dvKey)) domainVintageMap.set(dvKey, []);
+        domainVintageMap.get(dvKey)!.push(w);
       }
     });
 
-    return map;
-  }, [wines]);
-
-  // Récupérer le stock et les métadonnées d'une ligne de vin Word
-  const getWineLiveStock = (line: WordWineLine, domaineName: string) => {
-    const isDPR = isDPRString(domaineName);
-    const dKey = isDPR ? 'dpr' : normalizeText(domaineName);
-    const vKey = (line.vintage || '').trim();
-    const nKey = normalizeText(line.name);
-
-    // Recherche directe
-    let matched: Wine | undefined = firebaseWineIndex.get(`${dKey}_${vKey}_${nKey}`);
-
-    // Recherche floue si non trouvé
-    if (!matched && wines) {
-      matched = wines.find(w => {
-        if (w.color === 'spiritueux' || w.color === 'soft') return false;
-        const wDPR = isDPRString(w.domain || '');
-        if (isDPR && !wDPR) return false;
-        if (!isDPR && !normalizeText(w.domain).includes(dKey) && !dKey.includes(normalizeText(w.domain))) return false;
-        if (vKey && vKey !== 'NV' && w.vintage && w.vintage.toString() !== vKey) return false;
-        const wNameNorm = normalizeText(w.name);
-        return wNameNorm.includes(nKey) || nKey.includes(wNameNorm);
-      });
-    }
-
-    if (!matched) {
-      return { matchedWine: undefined, stock75: 0, stock150: 0, totalStock: 0, isHidden: false };
-    }
-
-    const isHidden = !!matched.hideFromMenu || !!hiddenWines[matched.id];
-
-    if (perimeter === 'salle') {
-      const siteStocks = matched.siteStocks || {};
-      let s75 = 0;
-      let s150 = 0;
-      for (let i = 1; i <= 4; i++) {
-        const entry = siteStocks[`site-${i}`];
-        if (entry) {
-          s75 += (entry.stock75 || 0);
-          s150 += (entry.stock150 || 0);
+    // Helper calcul stock
+    const calcStock = (w: Wine): { stock75: number; stock150: number; total: number } => {
+      if (perimeter === 'salle') {
+        const siteStocks = w.siteStocks || {};
+        let s75 = 0, s150 = 0;
+        for (let i = 1; i <= 4; i++) {
+          const entry = siteStocks[`site-${i}`];
+          if (entry) {
+            s75 += (entry.stock75 || 0);
+            s150 += (entry.stock150 || 0);
+          }
         }
+        const hasSites = Object.keys(siteStocks).length > 0;
+        return {
+          stock75: hasSites ? s75 : (w.stock75 || 0),
+          stock150: hasSites ? s150 : (w.stock150 || 0),
+          total: hasSites ? (s75 + s150) : ((w.stock75 || 0) + (w.stock150 || 0))
+        };
+      } else {
+        const s75 = w.stock75 || 0;
+        const s150 = w.stock150 || 0;
+        return { stock75: s75, stock150: s150, total: s75 + s150 };
       }
-      const hasSites = Object.keys(siteStocks).length > 0;
-      const total = hasSites ? (s75 + s150) : ((matched.stock75 || 0) + (matched.stock150 || 0));
-      return { 
-        matchedWine: matched, 
-        stock75: hasSites ? s75 : (matched.stock75 || 0), 
-        stock150: hasSites ? s150 : (matched.stock150 || 0), 
-        totalStock: total, 
-        isHidden 
-      };
-    } else {
-      const s75 = matched.stock75 || 0;
-      const s150 = matched.stock150 || 0;
-      return { 
-        matchedWine: matched, 
-        stock75: s75, 
-        stock150: s150, 
-        totalStock: s75 + s150, 
-        isHidden 
-      };
-    }
-  };
+    };
+
+    // Pré-calcul de rapprochement O(1) pour chacune des 1 223 lignes officielles
+    OFFICIAL_WORD_SECTIONS.forEach(sec => {
+      sec.subRegions.forEach(sub => {
+        sub.domaines.forEach(dom => {
+          const isDPR = isDPRString(dom.name);
+          const dKey = isDPR ? 'dpr' : normalizeText(dom.name);
+
+          dom.wines.forEach(line => {
+            const cacheKey = `${dom.name}_${line.vintage}_${line.name}`;
+            const vKey = (line.vintage || '').trim();
+            const nKey = normalizeText(line.name);
+
+            // 1. Recherche directe dans la map
+            let matched = exactMap.get(`${dKey}_${vKey}_${nKey}`);
+
+            // 2. Recherche rapide sur domaine + millésime
+            if (!matched && dKey && vKey) {
+              const candidates = domainVintageMap.get(`${dKey}_${vKey}`);
+              if (candidates) {
+                matched = candidates.find(c => {
+                  const cNorm = normalizeText(c.name);
+                  return cNorm.includes(nKey) || nKey.includes(cNorm);
+                });
+              }
+            }
+
+            if (matched) {
+              const { stock75, stock150, total } = calcStock(matched);
+              const isHidden = !!matched.hideFromMenu || !!hiddenWines[matched.id];
+              cache.set(cacheKey, { matchedWine: matched, stock75, stock150, totalStock: total, isHidden });
+            } else {
+              cache.set(cacheKey, { matchedWine: undefined, stock75: 0, stock150: 0, totalStock: 0, isHidden: false });
+            }
+          });
+        });
+      });
+    });
+
+    return cache;
+  }, [wines, perimeter, hiddenWines]);
+
+  // 2. Filtrage mémoïsé haute performance des sections officielles
+  const filteredSections = useMemo(() => {
+    const q = normalizeText(deferredSearch);
+    const hasSearch = q.length > 0;
+
+    return OFFICIAL_WORD_SECTIONS.map(section => {
+      const filteredSubRegions = section.subRegions.map(sub => {
+        const filteredDomaines = sub.domaines.map(dom => {
+          const domNorm = hasSearch ? normalizeText(dom.name) : '';
+          const subNorm = hasSearch ? normalizeText(sub.title) : '';
+
+          const filteredWines = dom.wines.filter(line => {
+            const cacheKey = `${dom.name}_${line.vintage}_${line.name}`;
+            const liveData = liveStockCache.get(cacheKey) || { matchedWine: undefined, totalStock: 0, isHidden: false };
+
+            // Filtre masquage sommelier
+            if (liveData.isHidden && !editMode) return false;
+
+            // Filtre de stock
+            if (stockFilter === 'en_stock') {
+              if (liveData.matchedWine && liveData.totalStock <= 0) return false;
+            }
+
+            // Filtre de recherche
+            if (hasSearch) {
+              const lineNorm = normalizeText(line.name);
+              const vNorm = (line.vintage || '').trim();
+              if (!lineNorm.includes(q) && !domNorm.includes(q) && !subNorm.includes(q) && !vNorm.includes(q)) {
+                return false;
+              }
+            }
+
+            return true;
+          });
+
+          return { ...dom, wines: filteredWines };
+        }).filter(dom => dom.wines.length > 0);
+
+        return { ...sub, domaines: filteredDomaines };
+      }).filter(sub => sub.domaines.length > 0);
+
+      return { ...section, subRegions: filteredSubRegions };
+    });
+  }, [deferredSearch, stockFilter, editMode, liveStockCache]);
 
   // Toggle masquer / afficher une référence
   const toggleWineVisibility = async (wine: Wine | undefined, wineKey: string) => {
@@ -247,7 +303,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     setHiddenWines(prev => ({ ...prev, [wineKey]: !prev[wineKey] }));
   };
 
-  // Lancement de l'impression native A4 haute-fidélité
+  // Impression native A4
   const handlePrint = () => {
     window.print();
   };
@@ -263,6 +319,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
         src={PREMNORD_WATERMARK_BASE64} 
         alt="" 
         className="max-h-full max-w-[85%] object-contain" 
+        loading="lazy"
       />
     </div>
   );
@@ -349,52 +406,16 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     </div>
   );
 
-  // Rendu d'une section officielle complète
+  // Rendu optimisé d'une section officielle
   const renderSectionContent = (section: WordSection) => {
     const isDPR = section.id === 'dpr';
-
-    // Filtrage des sous-régions et vins selon les critères de recherche et de stock
-    const filteredSubRegions = section.subRegions.map(sub => {
-      const filteredDomaines = sub.domaines.map(dom => {
-        const filteredWines = dom.wines.filter(line => {
-          const { matchedWine, totalStock, isHidden } = getWineLiveStock(line, dom.name);
-
-          // Filtre masquage sommelier
-          if (isHidden && !editMode) return false;
-
-          // Filtre de stock
-          if (stockFilter === 'en_stock') {
-            // Si le vin est matche dans Firebase et son stock est <= 0, masquer
-            if (matchedWine && totalStock <= 0) return false;
-          }
-
-          // Filtre de recherche textuelle
-          if (searchQuery.trim()) {
-            const q = normalizeText(searchQuery);
-            const lineNorm = normalizeText(line.name);
-            const domNorm = normalizeText(dom.name);
-            const subNorm = normalizeText(sub.title);
-            const vNorm = (line.vintage || '').trim();
-            if (!lineNorm.includes(q) && !domNorm.includes(q) && !subNorm.includes(q) && !vNorm.includes(q)) {
-              return false;
-            }
-          }
-
-          return true;
-        });
-
-        return { ...dom, wines: filteredWines };
-      }).filter(dom => dom.wines.length > 0);
-
-      return { ...sub, domaines: filteredDomaines };
-    }).filter(sub => sub.domaines.length > 0);
 
     return (
       <div className="book-page-a4 bg-white text-[#334552] relative shadow-lg rounded-sm mx-auto mb-8 w-full max-w-[210mm] min-h-[297mm] p-[18mm_20mm] flex flex-col justify-between overflow-hidden print:m-0 print:shadow-none print:rounded-none print:w-full print:min-h-[297mm] print:break-after-page print:p-[15mm_20mm]">
         {renderWatermark()}
 
         <div className="z-10 w-full">
-          {/* En-tête de colonnes 75 cl / 150 cl (strictement aligné en haut à droite) */}
+          {/* En-tête de colonnes 75 cl / 150 cl */}
           <div className="flex justify-end items-center gap-10 text-[11px] font-semibold text-[#A4513C] tracking-wide mb-2 pr-1">
             <span className="w-16 text-right">75 cl</span>
             <span className="w-16 text-right">150 cl</span>
@@ -414,29 +435,26 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
 
           {/* Liste des sous-régions, domaines et cuvées */}
           <div className="space-y-6">
-            {filteredSubRegions.map((sub, sIdx) => (
+            {section.subRegions.map((sub, sIdx) => (
               <div key={sIdx} className="space-y-4">
-                {/* Sous-titre de région (ex: Blancs, Rosés, Rouges, Champagne...) */}
                 <h3 className="text-base sm:text-lg font-bold text-[#A4513C] tracking-wide pb-1 border-b border-stone-100 print:border-none">
                   {sub.title}
                 </h3>
 
-                {/* Domaines */}
                 <div className="space-y-4">
                   {sub.domaines.map((dom, dIdx) => (
                     <div key={dIdx} className="space-y-1.5">
-                      {/* Afficher le domaine sauf si c'est DPR (qui a son titre principal en haut) */}
                       {!isDPR && dom.name && dom.name !== 'Domaine Inconnu' && (
                         <h4 className="text-[13px] font-bold text-[#334552] pt-1">
                           {dom.name}
                         </h4>
                       )}
 
-                      {/* Lignes de vins officielles */}
                       <div className="space-y-1">
                         {dom.wines.map((line, wIdx) => {
-                          const { matchedWine, totalStock, isHidden } = getWineLiveStock(line, dom.name);
-                          const wineKey = `${dom.name}_${line.vintage}_${line.name}`;
+                          const cacheKey = `${dom.name}_${line.vintage}_${line.name}`;
+                          const liveData = liveStockCache.get(cacheKey) || { matchedWine: undefined, totalStock: 0, isHidden: false };
+                          const { matchedWine, totalStock, isHidden } = liveData;
 
                           return (
                             <div 
@@ -446,31 +464,26 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
                                 matchedWine && onSelectWine ? 'cursor-pointer hover:bg-stone-50/80 rounded px-1 -mx-1' : ''
                               } ${isHidden ? 'opacity-40 line-through' : ''}`}
                             >
-                              {/* Bouton Sommelier Masquer / Afficher */}
                               {editMode && (
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    toggleWineVisibility(matchedWine, wineKey);
+                                    toggleWineVisibility(matchedWine, cacheKey);
                                   }}
-                                  className="mr-2 text-stone-400 hover:text-[#A4513C] print:hidden shrink-0"
+                                  className="mr-2 text-stone-400 hover:text-[#A4513C] print:hidden shrink-0 cursor-pointer"
                                   title={isHidden ? 'Révéler sur la carte' : 'Masquer de la carte'}
                                 >
                                   {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-stone-600" />}
                                 </button>
                               )}
 
-                              {/* Colonne 1 : Millésime */}
                               <span className="w-12 shrink-0 font-normal text-[#334552] text-left">
                                 {line.vintage || ''}
                               </span>
 
-                              {/* Colonne 2 : Nom de Cuvée / Appellation */}
                               <span className="flex-1 text-[#334552] font-normal truncate pr-4">
                                 {line.name}
-
-                                {/* Badge de stock en direct si activé par le sommelier */}
                                 {showStockBadges && matchedWine && (
                                   <span className="ml-2 text-[10px] px-1.5 py-0.2 rounded bg-stone-100 text-[#334552] font-medium print:hidden">
                                     {totalStock} bt
@@ -478,12 +491,10 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
                                 )}
                               </span>
 
-                              {/* Colonne 3 : Prix 75 cl */}
                               <span className="w-16 shrink-0 text-right font-normal text-[#334552]">
                                 {line.price75 || ''}
                               </span>
 
-                              {/* Colonne 4 : Prix 150 cl */}
                               <span className="w-16 shrink-0 text-right font-normal text-[#334552]">
                                 {line.price150 || ''}
                               </span>
@@ -497,7 +508,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               </div>
             ))}
 
-            {filteredSubRegions.length === 0 && (
+            {section.subRegions.length === 0 && (
               <div className="py-12 text-center text-stone-400 text-xs italic">
                 Aucun vin ne correspond aux critères de recherche actuels.
               </div>
@@ -505,7 +516,6 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           </div>
         </div>
 
-        {/* Pied de page officiel */}
         <div className="z-10 pt-6 flex justify-between items-center text-[10px] text-[#8C9BA5] border-t border-stone-100 print:border-none">
           <span>Premnord — Livre de Cave</span>
           <span>Page {section.pageNumber}</span>
@@ -514,9 +524,12 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     );
   };
 
+  const activeFilteredSection = useMemo(() => {
+    return filteredSections.find(s => s.id === selectedSection) || filteredSections[0];
+  }, [filteredSections, selectedSection]);
+
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-stone-100/60 text-[#334552] word-iso-font">
-      {/* Styles d'impression CSS A4 natifs et polices Word ISO */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
 
@@ -527,6 +540,11 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
         .font-title {
           font-family: 'Sugo Pro Display Trial', 'Sugo Pro', 'Plus Jakarta Sans', Calibri, 'Segoe UI', sans-serif;
           letter-spacing: 0.14em;
+        }
+
+        .book-page-a4 {
+          content-visibility: auto;
+          contain-intrinsic-size: 800px;
         }
 
         @media print {
@@ -551,6 +569,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             background: #ffffff !important;
           }
           .book-page-a4 {
+            content-visibility: visible !important;
             width: 210mm !important;
             min-height: 297mm !important;
             max-height: 297mm !important;
@@ -574,9 +593,8 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
         }
       `}</style>
 
-      {/* Barre latérale des contrôles Sommelier (Masquée lors de l'impression) */}
+      {/* Barre latérale des contrôles Sommelier */}
       <aside className="no-print w-full lg:w-80 bg-white border-r border-stone-200/80 p-5 space-y-6 shrink-0 shadow-sm">
-        {/* Titre & Statut Officiel */}
         <div>
           <div className="flex items-center gap-2 mb-1">
             <BookOpen className="w-5 h-5 text-[#A4513C]" />
@@ -621,7 +639,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           )}
         </div>
 
-        {/* Recherche instantanée */}
+        {/* Recherche instantanée optimisée */}
         <div className="space-y-1.5">
           <label className="text-[11px] font-semibold text-[#334552] uppercase tracking-wider">
             Recherche dans le livre
@@ -639,7 +657,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-2 text-stone-400 hover:text-stone-600"
+                className="absolute right-2.5 top-2 text-stone-400 hover:text-stone-600 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -656,7 +674,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             <button
               type="button"
               onClick={() => setStockFilter('tous')}
-              className={`py-1.5 rounded-md font-medium text-center transition-all ${
+              className={`py-1.5 rounded-md font-medium text-center transition-all cursor-pointer ${
                 stockFilter === 'tous'
                   ? 'bg-white text-[#334552] shadow-xs'
                   : 'text-stone-600 hover:text-[#334552]'
@@ -667,7 +685,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             <button
               type="button"
               onClick={() => setStockFilter('en_stock')}
-              className={`py-1.5 rounded-md font-medium text-center transition-all ${
+              className={`py-1.5 rounded-md font-medium text-center transition-all cursor-pointer ${
                 stockFilter === 'en_stock'
                   ? 'bg-white text-[#334552] shadow-xs'
                   : 'text-stone-600 hover:text-[#334552]'
@@ -687,7 +705,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             <button
               type="button"
               onClick={() => setPerimeter('salle')}
-              className={`py-1.5 rounded-md font-medium text-center transition-all ${
+              className={`py-1.5 rounded-md font-medium text-center transition-all cursor-pointer ${
                 perimeter === 'salle'
                   ? 'bg-white text-[#334552] shadow-xs'
                   : 'text-stone-600 hover:text-[#334552]'
@@ -698,7 +716,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             <button
               type="button"
               onClick={() => setPerimeter('cave')}
-              className={`py-1.5 rounded-md font-medium text-center transition-all ${
+              className={`py-1.5 rounded-md font-medium text-center transition-all cursor-pointer ${
                 perimeter === 'cave'
                   ? 'bg-white text-[#334552] shadow-xs'
                   : 'text-stone-600 hover:text-[#334552]'
@@ -731,7 +749,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
                   setSelectedSection(ch.id as any);
                   setViewMode('chapitre');
                 }}
-                className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors flex justify-between items-center ${
+                className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors flex justify-between items-center cursor-pointer ${
                   selectedSection === ch.id && viewMode === 'chapitre'
                     ? 'bg-[#A4513C]/10 text-[#A4513C] font-semibold'
                     : 'text-stone-600 hover:bg-stone-50 hover:text-[#334552]'
@@ -755,7 +773,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             <button
               type="button"
               onClick={() => setViewMode('chapitre')}
-              className={`py-1.5 rounded-md font-medium text-center transition-all ${
+              className={`py-1.5 rounded-md font-medium text-center transition-all cursor-pointer ${
                 viewMode === 'chapitre'
                   ? 'bg-white text-[#334552] shadow-xs'
                   : 'text-stone-600 hover:text-[#334552]'
@@ -766,7 +784,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             <button
               type="button"
               onClick={() => setViewMode('tout_defiler')}
-              className={`py-1.5 rounded-md font-medium text-center transition-all ${
+              className={`py-1.5 rounded-md font-medium text-center transition-all cursor-pointer ${
                 viewMode === 'tout_defiler'
                   ? 'bg-white text-[#334552] shadow-xs'
                   : 'text-stone-600 hover:text-[#334552]'
@@ -779,7 +797,6 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
 
         {/* Options Sommelier Avancées */}
         <div className="pt-2 border-t border-stone-200/80 space-y-3">
-          {/* Badges de stock à l'écran */}
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-xs text-[#334552]">Badges de stock (Écran)</span>
             <input
@@ -790,7 +807,6 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             />
           </label>
 
-          {/* Mode Édition Sommelier */}
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-xs text-[#334552]">Mode Édition (Masquer vins)</span>
             <input
@@ -801,7 +817,6 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             />
           </label>
 
-          {/* Note règle Oncle : Spiritueux exclus */}
           <div className="bg-amber-50/70 border border-amber-200/60 rounded-lg p-2.5 text-[11px] text-amber-900 leading-relaxed">
             <span className="font-semibold block mb-0.5">ℹ️ Règle Livre de Cave</span>
             Les alcools forts, spiritueux et softs sont automatiquement exclus de ce livre officiel.
@@ -816,16 +831,14 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
             {selectedSection === 'couverture' && renderCoverPage()}
             {selectedSection === 'sommaire' && renderSommairePage()}
             {selectedSection !== 'couverture' && selectedSection !== 'sommaire' && (
-              renderSectionContent(
-                OFFICIAL_WORD_SECTIONS.find(s => s.id === selectedSection) || OFFICIAL_WORD_SECTIONS[0]
-              )
+              renderSectionContent(activeFilteredSection)
             )}
           </div>
         ) : (
           <div className="w-full flex flex-col items-center">
             {renderCoverPage()}
             {renderSommairePage()}
-            {OFFICIAL_WORD_SECTIONS.map((sec) => (
+            {filteredSections.map((sec) => (
               <React.Fragment key={sec.id}>
                 {renderSectionContent(sec)}
               </React.Fragment>
