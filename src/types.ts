@@ -238,6 +238,8 @@ export interface Movement {
   userId: string;
   userName: string;
   createdAt: number;
+  domain?: string;
+  vintage?: string;
 }
 
 export interface UserProfile {

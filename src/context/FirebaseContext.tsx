@@ -1132,8 +1132,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       throw new Error("L'utilisateur doit être connecté pour enregistrer un mouvement de stock.");
     }
 
+    const relatedWine = winesStateRef.current.find(w => w.id === movementInput.wineId);
     const newMovement: Movement = {
       ...movementInput,
+      domain: movementInput.domain || relatedWine?.domain,
+      vintage: movementInput.vintage || relatedWine?.vintage,
       id,
       userId: movementInput.userId || currentUser?.uid || 'user_guest',
       userName: movementInput.userName || currentUser?.displayName || currentUser?.email || 'Sommelier',
@@ -1185,8 +1188,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       w =>
         w.siteId === siteId &&
         normalizeWineString(w.name) === normalizeWineString(mov.wineName) &&
-        normalizeWineString(w.domain) === normalizeWineString(mov.domain) &&
-        normalizeWineString(w.vintage) === normalizeWineString(mov.vintage)
+        (!mov.domain || normalizeWineString(w.domain) === normalizeWineString(mov.domain)) &&
+        (!mov.vintage || normalizeWineString(w.vintage) === normalizeWineString(mov.vintage))
     );
   };
 

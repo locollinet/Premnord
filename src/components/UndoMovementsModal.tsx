@@ -107,8 +107,8 @@ export const UndoMovementsModal: React.FC<UndoMovementsModalProps> = ({
       w =>
         w.siteId === siteId &&
         normalizeWineString(w.name) === normalizeWineString(mov.wineName) &&
-        normalizeWineString(w.domain) === normalizeWineString(mov.domain) &&
-        normalizeWineString(w.vintage) === normalizeWineString(mov.vintage)
+        (!mov.domain || normalizeWineString(w.domain) === normalizeWineString(mov.domain)) &&
+        (!mov.vintage || normalizeWineString(w.vintage) === normalizeWineString(mov.vintage))
     );
   };
 
