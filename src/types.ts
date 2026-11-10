@@ -146,6 +146,25 @@ export const isSameWineReference = (
   return nameMatches;
 };
 
+export const isSite6 = (
+  siteIdOrWine?: string | { siteId?: string } | null,
+  sites?: { id: string; name: string }[]
+): boolean => {
+  if (!siteIdOrWine) return false;
+  const siteId = typeof siteIdOrWine === 'string' ? siteIdOrWine : siteIdOrWine.siteId;
+  if (!siteId) return false;
+  const sIdNorm = siteId.toLowerCase().trim();
+  if (sIdNorm === 'site-6' || sIdNorm.endsWith('-6') || sIdNorm === '6') return true;
+  if (sites && sites.length > 0) {
+    const siteObj = sites.find(s => s.id === siteId);
+    if (siteObj) {
+      const sNameNorm = (siteObj.name || '').toLowerCase().trim();
+      if (sNameNorm.includes('site 6') || sNameNorm.includes('vieillissement')) return true;
+    }
+  }
+  return false;
+};
+
 export interface Site {
   id: string;
   name: string;
@@ -197,6 +216,7 @@ export interface Wine {
   priceSell?: number;
   notes?: string;
   hideFromMenu?: boolean;
+  validatedForCarte?: boolean;
   createdAt: number;
   updatedAt: number;
   appellation?: string;

@@ -30,6 +30,8 @@
         "priceBuy": { "type": "number", "description": "Purchase price per bottle" },
         "priceSell": { "type": "number", "description": "Selling price per bottle" },
         "notes": { "type": "string", "description": "Additional notes/comments" },
+        "hideFromMenu": { "type": "boolean", "description": "Whether the wine is manually hidden from the wine menu" },
+        "validatedForCarte": { "type": "boolean", "description": "Explicit sommelier validation to display this wine on the wine menu even when located in Site 6 (Vieillissement)" },
         "createdAt": { "type": "number", "description": "Timestamp of creation" },
         "updatedAt": { "type": "number", "description": "Timestamp of last edit" }
       },

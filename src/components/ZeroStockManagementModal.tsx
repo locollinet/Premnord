@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Wine, Site, WineColor, getWineReferenceKey, getCanonicalDomain } from '../types';
+import { matchesWineSearch } from '../lib/stringUtils';
 import { 
   Trash2, 
   AlertTriangle, 
@@ -212,9 +213,7 @@ export const ZeroStockManagementModal: React.FC<ZeroStockManagementModalProps> =
 
       // 3. Search query filter
       if (searchTerm.trim()) {
-        const q = searchTerm.toLowerCase().trim();
-        const text = `${item.wine.domain} ${item.wine.name} ${item.wine.cuvee || ''} ${item.wine.appellation || ''} ${item.wine.vintage} ${item.wine.bin || ''} ${item.siteName}`.toLowerCase();
-        if (!text.includes(q)) return false;
+        if (!matchesWineSearch(item.wine, searchTerm, item.siteName)) return false;
       }
 
       return true;

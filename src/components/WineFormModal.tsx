@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
-import { Wine, WineColor, TechnicalSheet, isSameWineReference } from '../types';
+import { Wine, WineColor, TechnicalSheet, isSameWineReference, isSite6 } from '../types';
 import { calculateSellingPrice, getPricingCoefficient } from '../lib/pricing';
 import { X, Save, ShieldAlert, Sparkles, Calculator, HelpCircle, ChevronDown, ChevronUp, Search, CheckCircle, Database, RefreshCw, AlertTriangle, Check, Layers, Trash2 } from 'lucide-react';
 
@@ -282,6 +282,7 @@ export const WineFormModal: React.FC<WineFormModalProps> = ({ wineToEdit, isDupl
   const [quantity, setQuantity] = useState(6);
   const [alertThreshold, setAlertThreshold] = useState(3);
   const [siteId, setSiteId] = useState('');
+  const [validatedForCarte, setValidatedForCarte] = useState(false);
 
   // Determine effective wine to edit:
   // If wineToEdit has 0 stock but this same reference exists on another site with stock > 0,
@@ -590,6 +591,7 @@ export const WineFormModal: React.FC<WineFormModalProps> = ({ wineToEdit, isDupl
       setQuantity(targetWine.quantity);
       setAlertThreshold(targetWine.alertThreshold);
       setSiteId(targetWine.siteId);
+      setValidatedForCarte(Boolean(targetWine.validatedForCarte));
       
       // Parse bin into Column and Level if possible (e.g., "D4", "12B", "A-2")
       const binVal = (targetWine.bin || '').trim();
@@ -793,6 +795,7 @@ export const WineFormModal: React.FC<WineFormModalProps> = ({ wineToEdit, isDupl
       alertThreshold: Number(alertThreshold) || 0,
       siteId,
       bin: computedBin || undefined,
+      validatedForCarte: Boolean(validatedForCarte),
       priceBuy: parsedBuy > 0 ? parsedBuy : undefined,
       priceBuyHt: parsedHt > 0 ? parsedHt : undefined,
       shippingCost: parsedPort > 0 ? parsedPort : undefined,
@@ -1347,6 +1350,39 @@ export const WineFormModal: React.FC<WineFormModalProps> = ({ wineToEdit, isDupl
             <p className="text-[10px] text-slate-400 font-serif italic">
               * Aide : Emplacement composé = {computedBin || 'D4'} (Colonne/Allée : {colLetter || '—'}, Étage/Niveau : {levelNumber || '—'}) dans {selectedSiteObj?.name?.split(' - ')[0] || 'le site sélectionné'}.
             </p>
+
+            {/* Validation Mise à la Carte (Particulièrement pour Site 6 : Vieillissement) */}
+            <div className={`p-3.5 rounded-xl border transition-all ${
+              isSite6(siteId, sites)
+                ? (validatedForCarte ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950' : 'bg-amber-50/80 border-amber-300 text-amber-950')
+                : (validatedForCarte ? 'bg-emerald-50/50 border-emerald-200 text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-800')
+            }`}>
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={validatedForCarte}
+                  onChange={(e) => setValidatedForCarte(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded text-red-600 focus:ring-red-500 cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold font-mono uppercase tracking-wide">
+                      Validation Carte : Mettre ce vin à la carte
+                    </span>
+                    {isSite6(siteId, sites) && (
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.2 rounded bg-amber-200/80 text-amber-900 border border-amber-300">
+                        Site 6 : Vieillissement
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 font-sans leading-relaxed">
+                    {isSite6(siteId, sites)
+                      ? "Cochez pour valider ce vin stocké en cave de vieillissement (Site 6) afin qu'il soit proposé à la carte des vins et servi aux clients."
+                      : "Valider explicitement la mise à la carte de cette référence."}
+                  </p>
+                </div>
+              </label>
+            </div>
 
             {/* Quantities */}
             <div className="grid grid-cols-2 gap-4">

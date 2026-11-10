@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useDeferredValue } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
-import { Wine } from '../types';
+import { Wine, isSite6, extractWineFormat, cleanWineName } from '../types';
+import { matchesWineSearch } from '../lib/stringUtils';
 import { PREMNORD_WATERMARK_BASE64 } from '../assets/watermarkBase64';
 import { 
   OFFICIAL_WORD_SECTIONS, 
@@ -17,7 +18,9 @@ import {
   Search, 
   ExternalLink,
   X,
-  FileText
+  FileText,
+  CheckCircle,
+  Plus
 } from 'lucide-react';
 
 export interface WineMenuDocumentStyleProps {
@@ -44,10 +47,14 @@ const isDPRString = (str: string): boolean => {
 // Interface pour les métadonnées de stock pré-calculées O(1)
 interface LiveWineData {
   matchedWine?: Wine;
+  allMatchedWines: Wine[];
   stock75: number;
   stock150: number;
   totalStock: number;
   isHidden: boolean;
+  hasSite6Stock: boolean;
+  isSite6Validated: boolean;
+  site6StockTotal: number;
 }
 
 // Sommaire officiel 100% ISO au document Word carte_vins_2026_10_29.docx
@@ -130,7 +137,7 @@ const SOMMAIRE_COL_2: SommaireEntry[] = [
 ];
 
 export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ onSelectWine }) => {
-  const { wines, updateWine } = useFirebase();
+  const { wines, sites, updateWine } = useFirebase();
 
   // Contrôles Métier
   const [selectedSection, setSelectedSection] = useState<'couverture' | 'sommaire' | 'dpr' | 'bulle' | 'blanc' | 'rose' | 'rouge'>('dpr');
@@ -159,20 +166,26 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     // Filtre strict : AUCUN spiritueux ni soft
     const wineList = wines.filter(w => w.color !== 'spiritueux' && w.color !== 'soft');
 
-    // Indexation multi-clefs pour accès instantané O(1)
-    const exactMap = new Map<string, Wine>();
+    // Indexation multi-clefs pour accès instantané O(1) avec support multi-sites
+    const exactMap = new Map<string, Wine[]>();
     const domainVintageMap = new Map<string, Wine[]>();
 
     wineList.forEach(w => {
       const isDPR = isDPRString(w.domain || '');
       const dKey = isDPR ? 'dpr' : normalizeText(w.domain);
       const vKey = (w.vintage || '').toString().trim();
-      const nKey = normalizeText(w.name || '');
-      const cKey = normalizeText(w.cuvee || '');
+      const nKey = normalizeText(cleanWineName(w.name || ''));
+      const cKey = normalizeText(cleanWineName(w.cuvee || ''));
+
+      const addToMap = (key: string, item: Wine) => {
+        const arr = exactMap.get(key);
+        if (!arr) exactMap.set(key, [item]);
+        else arr.push(item);
+      };
 
       if (dKey && vKey) {
-        if (nKey) exactMap.set(`${dKey}_${vKey}_${nKey}`, w);
-        if (cKey && cKey !== nKey) exactMap.set(`${dKey}_${vKey}_${cKey}`, w);
+        if (nKey) addToMap(`${dKey}_${vKey}_${nKey}`, w);
+        if (cKey && cKey !== nKey) addToMap(`${dKey}_${vKey}_${cKey}`, w);
 
         const dvKey = `${dKey}_${vKey}`;
         if (!domainVintageMap.has(dvKey)) domainVintageMap.set(dvKey, []);
@@ -180,29 +193,65 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
       }
     });
 
-    // Helper calcul stock
-    const calcStock = (w: Wine): { stock75: number; stock150: number; total: number } => {
-      if (perimeter === 'salle') {
-        const siteStocks = w.siteStocks || {};
-        let s75 = 0, s150 = 0;
-        for (let i = 1; i <= 4; i++) {
-          const entry = siteStocks[`site-${i}`];
-          if (entry) {
-            s75 += (entry.stock75 || 0);
-            s150 += (entry.stock150 || 0);
+    // Helper calcul stock & statut Site 6
+    const evaluateWineMatches = (candidates: Wine[]): {
+      stock75: number;
+      stock150: number;
+      total: number;
+      hasSite6: boolean;
+      isSite6Val: boolean;
+      site6Qty: number;
+    } => {
+      let s75 = 0;
+      let s150 = 0;
+      let hasSite6 = false;
+      let isSite6Val = false;
+      let site6Qty = 0;
+
+      for (const w of candidates) {
+        const inSite6 = isSite6(w, sites);
+        const qty = w.quantity || 0;
+        const isVal = !!w.validatedForCarte;
+
+        if (inSite6) {
+          if (qty > 0) hasSite6 = true;
+          if (isVal) isSite6Val = true;
+          site6Qty += qty;
+        }
+
+        // Vérification inclusion selon périmètre
+        let includeInStock = false;
+        if (perimeter === 'salle') {
+          // Sites 1 à 4 sont toujours en salle de restaurant
+          // Site 6 (Vieillissement) est inclus SI validé pour la carte !
+          const sId = (w.siteId || '').toLowerCase();
+          const isStandardSalle = sId === 'site-1' || sId === 'site-2' || sId === 'site-3' || sId === 'site-4';
+          if (isStandardSalle || (inSite6 && isVal)) {
+            includeInStock = true;
+          }
+        } else {
+          // Périmètre cave entière
+          includeInStock = true;
+        }
+
+        if (includeInStock) {
+          const fmt = extractWineFormat(w);
+          if (fmt === 'magnum') {
+            s150 += qty;
+          } else {
+            s75 += qty;
           }
         }
-        const hasSites = Object.keys(siteStocks).length > 0;
-        return {
-          stock75: hasSites ? s75 : (w.stock75 || 0),
-          stock150: hasSites ? s150 : (w.stock150 || 0),
-          total: hasSites ? (s75 + s150) : ((w.stock75 || 0) + (w.stock150 || 0))
-        };
-      } else {
-        const s75 = w.stock75 || 0;
-        const s150 = w.stock150 || 0;
-        return { stock75: s75, stock150: s150, total: s75 + s150 };
       }
+
+      return {
+        stock75: s75,
+        stock150: s150,
+        total: s75 + s150,
+        hasSite6,
+        isSite6Val,
+        site6Qty
+      };
     };
 
     // Pré-calcul de rapprochement O(1) pour chacune des 1 223 lignes officielles
@@ -215,28 +264,51 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           dom.wines.forEach(line => {
             const cacheKey = `${dom.name}_${line.vintage}_${line.name}`;
             const vKey = (line.vintage || '').trim();
-            const nKey = normalizeText(line.name);
+            const nKey = normalizeText(cleanWineName(line.name));
 
             // 1. Recherche directe dans la map
-            let matched = exactMap.get(`${dKey}_${vKey}_${nKey}`);
+            let matchedList = exactMap.get(`${dKey}_${vKey}_${nKey}`) || [];
 
-            // 2. Recherche rapide sur domaine + millésime
-            if (!matched && dKey && vKey) {
-              const candidates = domainVintageMap.get(`${dKey}_${vKey}`);
-              if (candidates) {
-                matched = candidates.find(c => {
-                  const cNorm = normalizeText(c.name);
-                  return cNorm.includes(nKey) || nKey.includes(cNorm);
+            // 2. Recherche rapide sur domaine + millésime si non trouvé
+            if (matchedList.length === 0 && dKey && vKey) {
+              const dvCandidates = domainVintageMap.get(`${dKey}_${vKey}`);
+              if (dvCandidates) {
+                matchedList = dvCandidates.filter(c => {
+                  const cNorm = normalizeText(cleanWineName(c.name));
+                  const cCuvee = normalizeText(cleanWineName(c.cuvee || ''));
+                  return cNorm.includes(nKey) || nKey.includes(cNorm) || (cCuvee && (cCuvee.includes(nKey) || nKey.includes(cCuvee)));
                 });
               }
             }
 
-            if (matched) {
-              const { stock75, stock150, total } = calcStock(matched);
-              const isHidden = !!matched.hideFromMenu || !!hiddenWines[matched.id];
-              cache.set(cacheKey, { matchedWine: matched, stock75, stock150, totalStock: total, isHidden });
+            if (matchedList.length > 0) {
+              const primaryWine = matchedList[0];
+              const { stock75, stock150, total, hasSite6, isSite6Val, site6Qty } = evaluateWineMatches(matchedList);
+              const isHidden = matchedList.some(w => !!w.hideFromMenu || !!hiddenWines[w.id]);
+
+              cache.set(cacheKey, {
+                matchedWine: primaryWine,
+                allMatchedWines: matchedList,
+                stock75,
+                stock150,
+                totalStock: total,
+                isHidden,
+                hasSite6Stock: hasSite6,
+                isSite6Validated: isSite6Val,
+                site6StockTotal: site6Qty
+              });
             } else {
-              cache.set(cacheKey, { matchedWine: undefined, stock75: 0, stock150: 0, totalStock: 0, isHidden: false });
+              cache.set(cacheKey, {
+                matchedWine: undefined,
+                allMatchedWines: [],
+                stock75: 0,
+                stock150: 0,
+                totalStock: 0,
+                isHidden: false,
+                hasSite6Stock: false,
+                isSite6Validated: false,
+                site6StockTotal: 0
+              });
             }
           });
         });
@@ -244,7 +316,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     });
 
     return cache;
-  }, [wines, perimeter, hiddenWines]);
+  }, [wines, sites, perimeter, hiddenWines]);
 
   // 2. Filtrage mémoïsé haute performance des sections officielles
   const filteredSections = useMemo(() => {
@@ -269,11 +341,9 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               if (liveData.matchedWine && liveData.totalStock <= 0) return false;
             }
 
-            // Filtre de recherche
+            // Filtre de recherche haute précision
             if (hasSearch) {
-              const lineNorm = normalizeText(line.name);
-              const vNorm = (line.vintage || '').trim();
-              if (!lineNorm.includes(q) && !domNorm.includes(q) && !subNorm.includes(q) && !vNorm.includes(q)) {
+              if (!matchesWineSearch({ name: line.name, domain: dom.name, vintage: line.vintage, subRegion: sub.title }, deferredSearch)) {
                 return false;
               }
             }
@@ -302,6 +372,30 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
     }
     setHiddenWines(prev => ({ ...prev, [wineKey]: !prev[wineKey] }));
   };
+
+  // Basculer la validation carte pour les vins en Site 6 (Vieillissement)
+  const toggleSite6Validation = async (allWines: Wine[]) => {
+    if (!allWines || allWines.length === 0 || !updateWine) return;
+    const currentVal = allWines.some(w => !!w.validatedForCarte);
+    const nextVal = !currentVal;
+
+    try {
+      await Promise.all(
+        allWines.map(w => updateWine(w.id, { validatedForCarte: nextVal }))
+      );
+    } catch (err) {
+      console.error('Erreur bascule validation carte Site 6:', err);
+    }
+  };
+
+  // Compteur des références Site 6 validées pour la carte
+  const site6ValidatedCount = useMemo(() => {
+    let count = 0;
+    liveStockCache.forEach((data) => {
+      if (data.isSite6Validated) count++;
+    });
+    return count;
+  }, [liveStockCache]);
 
   // Impression native A4
   const handlePrint = () => {
@@ -453,8 +547,24 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
                       <div className="space-y-1">
                         {dom.wines.map((line, wIdx) => {
                           const cacheKey = `${dom.name}_${line.vintage}_${line.name}`;
-                          const liveData = liveStockCache.get(cacheKey) || { matchedWine: undefined, totalStock: 0, isHidden: false };
-                          const { matchedWine, totalStock, isHidden } = liveData;
+                          const liveData = liveStockCache.get(cacheKey) || { 
+                            matchedWine: undefined, 
+                            allMatchedWines: [],
+                            totalStock: 0, 
+                            isHidden: false,
+                            hasSite6Stock: false,
+                            isSite6Validated: false,
+                            site6StockTotal: 0
+                          };
+                          const { 
+                            matchedWine, 
+                            allMatchedWines, 
+                            totalStock, 
+                            isHidden,
+                            hasSite6Stock,
+                            isSite6Validated,
+                            site6StockTotal
+                          } = liveData;
 
                           return (
                             <div 
@@ -478,12 +588,57 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
                                 </button>
                               )}
 
+                              {/* Bouton de validation Site 6 en mode édition */}
+                              {editMode && hasSite6Stock && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleSite6Validation(allMatchedWines);
+                                  }}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer mr-2 print:hidden shrink-0 select-none shadow-xs ${
+                                    isSite6Validated
+                                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                      : 'bg-stone-100 text-stone-700 hover:bg-emerald-50 hover:text-emerald-700 border border-stone-200'
+                                  }`}
+                                  title={isSite6Validated ? 'Retirer ce vin de la carte' : 'Valider ce vin en Site 6 pour la carte'}
+                                >
+                                  {isSite6Validated ? '✓ À la carte' : '+ Valider carte'}
+                                </button>
+                              )}
+
                               <span className="w-12 shrink-0 font-normal text-[#334552] text-left">
                                 {line.vintage || ''}
                               </span>
 
                               <span className="flex-1 text-[#334552] font-normal truncate pr-4">
                                 {line.name}
+
+                                {/* Badge informatif Site 6 */}
+                                {hasSite6Stock && (
+                                  <span
+                                    className={`ml-2 inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold print:hidden ${
+                                      isSite6Validated
+                                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                        : 'bg-amber-50 text-amber-800 border border-amber-200'
+                                    }`}
+                                    title={
+                                      isSite6Validated
+                                        ? `Validé pour la carte (${site6StockTotal} bt en Site 6 Vieillissement comptabilisées au service salle)`
+                                        : `En cave Site 6 (${site6StockTotal} bt de vieillissement non autorisées en salle)`
+                                    }
+                                  >
+                                    {isSite6Validated ? (
+                                      <>
+                                        <CheckCircle className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        <span>Site 6 carte ({site6StockTotal})</span>
+                                      </>
+                                    ) : (
+                                      <span>🔒 Site 6 ({site6StockTotal})</span>
+                                    )}
+                                  </span>
+                                )}
+
                                 {showStockBadges && matchedWine && (
                                   <span className="ml-2 text-[10px] px-1.5 py-0.2 rounded bg-stone-100 text-[#334552] font-medium print:hidden">
                                     {totalStock} bt
@@ -808,7 +963,7 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
           </label>
 
           <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-xs text-[#334552]">Mode Édition (Masquer vins)</span>
+            <span className="text-xs text-[#334552]">Mode Édition (Masquer / Valider)</span>
             <input
               type="checkbox"
               checked={editMode}
@@ -816,6 +971,22 @@ export const WineMenuDocumentStyle: React.FC<WineMenuDocumentStyleProps> = ({ on
               className="rounded text-[#A4513C] focus:ring-[#A4513C] h-4 w-4"
             />
           </label>
+
+          {/* Statut Site 6 Validés pour la carte */}
+          <div className="bg-emerald-50/70 border border-emerald-200/70 rounded-lg p-2.5 space-y-1">
+            <div className="flex items-center justify-between text-xs font-semibold text-emerald-950">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Site 6 à la Carte</span>
+              </span>
+              <span className="bg-emerald-200/70 text-emerald-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {site6ValidatedCount} réf.
+              </span>
+            </div>
+            <p className="text-[10.5px] text-emerald-800/90 leading-tight">
+              Bouteilles en cave de vieillissement (Site 6) autorisées et décomptées pour le service en salle.
+            </p>
+          </div>
 
           <div className="bg-amber-50/70 border border-amber-200/60 rounded-lg p-2.5 text-[11px] text-amber-900 leading-relaxed">
             <span className="font-semibold block mb-0.5">ℹ️ Règle Livre de Cave</span>

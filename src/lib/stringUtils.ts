@@ -93,8 +93,31 @@ function damerauLevenshtein(a: string, b: string): number {
 }
 
 /**
+ * Normalise un texte de vin en enrichissant avec les équivalences œnologiques courantes :
+ * - "st" <-> "saint" (ex: "st-aubin" <-> "saint-aubin", "nuits-st-georges" <-> "nuits-saint-georges")
+ * - "1er" / "1ers" <-> "premier" / "premiers"
+ * - "gd cru" / "gc" <-> "grand cru"
+ */
+export function normalizeWineText(str: string | undefined | null): string {
+  if (!str || typeof str !== 'string') return '';
+  let clean = removeAccents(str).toLowerCase();
+  
+  // Remplacer ponctuation par des espaces simples
+  clean = clean.replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  // Normaliser les abréviations ultra courantes
+  clean = clean
+    .replace(/\bst\b/g, 'saint')
+    .replace(/\b1er\b/g, 'premier')
+    .replace(/\b1ers\b/g, 'premiers')
+    .replace(/\bgc\b/g, 'grand cru');
+
+  return clean;
+}
+
+/**
  * Extrait les expressions entre guillemets ("...", «...», “...”) pour une recherche exacte,
- * et les tokens libres hors guillemets pour une recherche multi-mots tolérante aux fautes.
+ * et les tokens libres hors guillemets pour une recherche multi-mots.
  */
 export function parseSearchQuery(searchQuery: string): {
   exactPhrases: string[];
@@ -106,54 +129,78 @@ export function parseSearchQuery(searchQuery: string): {
   // Capture "...", «...», “...”
   const quoteRegex = /(?:"([^"]+)"|«([^»]+)»|“([^”]+)”)/g;
   remaining = remaining.replace(quoteRegex, (_match, g1, g2, g3) => {
-    const phrase = normalizePhrase(g1 || g2 || g3 || '');
+    const phrase = normalizeWineText(g1 || g2 || g3 || '');
     if (phrase) exactPhrases.push(phrase);
     return ' ';
   });
 
-  // Si l'utilisateur a ouvert un guillemet sans le refermer (ex: `"Cote d'or`), on traite la fin comme phrase exacte
+  // Si l'utilisateur a ouvert un guillemet sans le refermer
   const unclosedQuoteMatch = remaining.match(/(?:["«“])([^"»”]+)$/);
   if (unclosedQuoteMatch) {
-    const phrase = normalizePhrase(unclosedQuoteMatch[1]);
+    const phrase = normalizeWineText(unclosedQuoteMatch[1]);
     if (phrase) exactPhrases.push(phrase);
     remaining = remaining.slice(0, unclosedQuoteMatch.index);
   }
 
-  const looseTokens = normalizeSearchTokens(remaining);
-  return { exactPhrases, looseTokens };
+  const cleanRemaining = normalizeWineText(remaining);
+  if (!cleanRemaining) {
+    return { exactPhrases, looseTokens: [] };
+  }
+
+  const rawTokens = cleanRemaining.split(' ').filter(Boolean);
+  // Élimine les articles d'une seule lettre ('d', 'l') sauf si la requête ne contient que ça
+  const looseTokens = rawTokens.filter(t => !(t.length === 1 && (t === 'd' || t === 'l')));
+  return {
+    exactPhrases,
+    looseTokens: looseTokens.length > 0 ? looseTokens : rawTokens
+  };
 }
 
 /**
- * Vérifie si un token libre matche dans la cible (exact, préfixe ou tolérant aux fautes de frappe).
+ * Vérifie si un token individuel correspond au texte d'un vin :
+ * 1. Mot exact dans la cible (ex: "chapuis" === "chapuis")
+ * 2. Préfixe d'un mot (ex: "chapu" -> "chapuis", "chabl" -> "chablis")
+ * 3. Sous-chaîne dans un mot individuel de la cible (au moins 4 lettres, ex: "montrachet" dans "puligny-montrachet")
+ * 4. Recherche concaténée sans espace (au moins 6 lettres, ex: "saintaubin" dans "saint aubin")
+ * 5. Alias spécifique DPR ("dpr" -> "Domaine Prieuré-Roch")
+ *
+ * NOTE : Ne JAMAIS autoriser de substitution arbitraire de lettres qui confond des noms de domaines
+ * ou appellations distincts (comme "Chapuis" avec "Chablis", ou "Corton" avec "Cotton").
  */
-function matchesLooseToken(
+export function tokenMatchesWine(
   token: string,
-  normalizedTarget: string,
-  compactTarget: string,
-  targetWords: string[]
+  targetWords: string[],
+  normalizedFullTarget: string,
+  compactTarget: string
 ): boolean {
-  if (normalizedTarget.includes(token)) return true;
-  if (token.length >= 2 && compactTarget.includes(token)) return true;
+  if (!token) return true;
 
-  // Pour les mots d'au moins 4 lettres, tolérance aux fautes de frappe (ex: "Bourgnonne" ou "bourgeonne" -> "Bourgogne")
+  // 1. Mot exact dans la cible
+  if (targetWords.includes(token)) return true;
+
+  // 2. Préfixe d'un mot de la cible (si le token fait au moins 2 lettres)
+  // Ex: "chapu" -> "chapuis", "ladoi" -> "ladoix", "meurs" -> "meursault"
+  for (const word of targetWords) {
+    if (word.startsWith(token)) return true;
+  }
+
+  // 3. Sous-chaîne dans un mot individuel de la cible (au moins 4 lettres)
+  // Ex: "montrachet" dans "puligny-montrachet", "corvees" dans "clos-des-corvees"
   if (token.length >= 4) {
-    const tokenPhonetic = phoneticFrenchKey(token);
-    const maxDist = token.length >= 7 ? 2 : 1;
-
     for (const word of targetWords) {
-      if (word.length < 3) continue;
-      const wordPhonetic = phoneticFrenchKey(word);
-      if (wordPhonetic.includes(tokenPhonetic) || tokenPhonetic.includes(wordPhonetic)) {
-        if (Math.abs(wordPhonetic.length - tokenPhonetic.length) <= 2) return true;
-      }
-      if (damerauLevenshtein(token, word) <= maxDist) return true;
-      if (damerauLevenshtein(tokenPhonetic, wordPhonetic) <= 1) return true;
-      // Si le mot cible est plus long, compare avec le préfixe du mot cible
-      if (word.length > token.length && token.length >= 5) {
-        const prefix = word.slice(0, token.length);
-        if (damerauLevenshtein(token, prefix) <= 1) return true;
-      }
+      if (word.includes(token)) return true;
     }
+  }
+
+  // 4. Cas où l'utilisateur a tapé une formule sans espace (au moins 6 lettres pour éviter collisions inter-mots)
+  // Ex: "saintaubin" ou "prieureroch" ou "closdescorvees"
+  if (token.length >= 6 && compactTarget.includes(token)) {
+    return true;
+  }
+
+  // 5. Cas spécifique Domaine Prieuré-Roch ("dpr")
+  if (token === 'dpr' && (normalizedFullTarget.includes('prieure roch') || normalizedFullTarget.includes('roch'))) {
+    return true;
   }
 
   return false;
@@ -162,10 +209,10 @@ function matchesLooseToken(
 /**
  * Vérifie si un vin correspond à une requête de recherche :
  * - Entre guillemets ("...") : recherche de la formule exacte contiguë.
- * - Sans guillemets (ex: Bourgnonne Cote d'or) : cherche chaque mot (cote / or / bourgogne) avec tolérance aux fautes.
+ * - Sans guillemets (ex: "chapuis aloxe", "prieure roch clos") : tous les termes doivent être présents.
  */
 export function matchesWineSearch(
-  wine: Wine,
+  wine: Partial<Wine>,
   searchQuery: string,
   extraSearchText?: string
 ): boolean {
@@ -183,55 +230,72 @@ export function matchesWineSearch(
   const subRegion = wine.subRegion || '';
   const country = wine.country || '';
   const bin = wine.bin || '';
+  const notes = wine.notes || '';
   const extra = extraSearchText || '';
 
-  // Chaîne complète normalisée (espaces simples, sans ponctuation ni accents)
-  const normalizedTarget = normalizePhrase(
-    `${name} ${domain} ${cuvee} ${appellation} ${vintage} ${region} ${subRegion} ${country} ${bin} ${extra}`
-  );
-  // Version sans élision d'/l' pour que la formule exacte "cote d'or" ou "cote or" matche aussi bien "Côte-d'Or" que "Côte d'Or"
-  const normalizedTargetNoElision = normalizedTarget.replace(/\b[dl]\s+/g, '');
+  // Cible complète normalisée avec gestion des accents, de la ponctuation et des abréviations
+  const rawTarget = `${name} ${domain} ${cuvee} ${appellation} ${vintage} ${region} ${subRegion} ${country} ${bin} ${notes} ${extra}`;
+  const normalizedTarget = normalizeWineText(rawTarget);
   const compactTarget = normalizedTarget.replace(/\s+/g, '');
   const targetWords = normalizedTarget.split(' ').filter(Boolean);
 
-  // 1. Toutes les formules entre guillemets doivent être présentes exactement (mots contigus dans l'ordre)
+  // 1. Toutes les formules entre guillemets doivent être présentes exactement (mots contigus)
   for (const phrase of exactPhrases) {
-    const phraseNoElision = phrase.replace(/\b[dl]\s+/g, '');
-    const paddedTarget = ` ${normalizedTarget} `;
-    const paddedTargetNoElision = ` ${normalizedTargetNoElision} `;
-    const exactMatch =
-      paddedTarget.includes(` ${phrase} `) ||
-      normalizedTarget.includes(phrase) ||
-      (phraseNoElision.length > 0 && paddedTargetNoElision.includes(` ${phraseNoElision} `));
-    if (!exactMatch) return false;
+    const padded = ` ${normalizedTarget} `;
+    if (!padded.includes(` ${phrase} `) && !normalizedTarget.includes(phrase)) {
+      return false;
+    }
   }
 
-  // 2. Tous les mots hors guillemets doivent matcher (exact ou tolérant aux fautes comme Bourgnonne -> Bourgogne)
+  // 2. Tous les mots hors guillemets doivent matcher
   return looseTokens.every(token =>
-    matchesLooseToken(token, normalizedTarget, compactTarget, targetWords)
+    tokenMatchesWine(token, targetWords, normalizedTarget, compactTarget)
   );
 }
 
 /**
  * Calcule un score de pertinence pour trier les résultats de recherche :
- * Correspondance exacte en tête, puis préfixe, puis inclusion.
+ * Correspondance exacte ou préfixe sur le Domaine / Appellation / Nom en tête,
+ * puis correspondance dans la cuvée ou les notes.
  */
-export function getWineSearchRelevanceScore(wine: Wine, searchQuery: string): number {
+export function getWineSearchRelevanceScore(wine: Partial<Wine>, searchQuery: string): number {
   if (!searchQuery || !searchQuery.trim()) return 0;
-  
-  const cleanQ = removeAccents(searchQuery).replace(/[^a-z0-9]/g, '');
+
+  const cleanQ = normalizeWineText(searchQuery);
   if (!cleanQ) return 0;
 
-  const cleanName = removeAccents(wine.name || '').replace(/[^a-z0-9]/g, '');
-  const cleanDomain = removeAccents(wine.domain || '').replace(/[^a-z0-9]/g, '');
-  const cleanCuvee = removeAccents(wine.cuvee || '').replace(/[^a-z0-9]/g, '');
+  const cleanDomain = normalizeWineText(wine.domain || '');
+  const cleanName = normalizeWineText(wine.name || '');
+  const cleanAppellation = normalizeWineText(wine.appellation || '');
+  const cleanCuvee = normalizeWineText(wine.cuvee || '');
 
-  if (cleanName === cleanQ || cleanCuvee === cleanQ) return 100;
-  if (cleanName.startsWith(cleanQ) || cleanCuvee.startsWith(cleanQ)) return 80;
-  if (cleanDomain === cleanQ) return 70;
-  if (cleanDomain.startsWith(cleanQ)) return 60;
-  if (cleanName.includes(cleanQ) || cleanCuvee.includes(cleanQ)) return 50;
-  if (cleanDomain.includes(cleanQ)) return 40;
+  // DPR alias
+  if (cleanQ === 'dpr' && (cleanDomain.includes('prieure roch') || cleanDomain.includes('roch'))) {
+    return 100;
+  }
 
-  return 10;
+  // Correspondance exacte sur le domaine ou l'appellation
+  if (cleanDomain === cleanQ || cleanAppellation === cleanQ) return 100;
+  if (cleanDomain.startsWith(cleanQ) || cleanAppellation.startsWith(cleanQ)) return 90;
+
+  // Correspondance exacte sur le nom du vin ou la cuvée
+  if (cleanName === cleanQ || cleanCuvee === cleanQ) return 85;
+  if (cleanName.startsWith(cleanQ) || cleanCuvee.startsWith(cleanQ)) return 75;
+
+  // Domaine contient la recherche complète
+  if (cleanDomain.includes(cleanQ)) return 65;
+
+  // Nom ou cuvée contient la recherche
+  if (cleanName.includes(cleanQ) || cleanCuvee.includes(cleanQ) || cleanAppellation.includes(cleanQ)) return 50;
+
+  // Score basé sur les tokens individuels
+  const tokens = cleanQ.split(' ').filter(Boolean);
+  let tokenScore = 0;
+  for (const t of tokens) {
+    if (cleanDomain.includes(t)) tokenScore += 15;
+    if (cleanName.includes(t)) tokenScore += 10;
+    if (cleanAppellation.includes(t)) tokenScore += 10;
+  }
+
+  return Math.min(45, 10 + tokenScore);
 }

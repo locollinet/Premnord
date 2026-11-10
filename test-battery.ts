@@ -15,6 +15,7 @@ import {
 } from './src/lib/accountingExportXlsx';
 import { isDPRWine, getCanonicalDomain, Wine, Movement, Site } from './src/types';
 import { classifyWineRegionAndSubRegion } from './src/lib/wineGrouping';
+import { matchesWineSearch, getWineSearchRelevanceScore, normalizeWineText } from './src/lib/stringUtils';
 
 console.log('====================================================');
 console.log('🧪 BATTERIE DE TESTS AUTOMATISÉS - SUIVI CAVE PREMNORD');
@@ -328,6 +329,65 @@ assert(REASON_LABELS['offert'] !== undefined, 'REASON_LABELS contient Offert');
 assert(REASON_LABELS['casse'] === 'Casse', 'REASON_LABELS contient Casse');
 assert(REASON_LABELS['bouchon'] === 'Bouchon', 'REASON_LABELS contient Bouchon');
 assert(REASON_LABELS['correction'] !== undefined, 'REASON_LABELS contient Correction');
+
+// ----------------------------------------------------
+// 9. TEST PRÉCISION MOTEUR DE RECHERCHE (DEMANDE ONCLE AURELIO)
+// ----------------------------------------------------
+console.log('\n--- TEST 9: Moteur de Recherche Cave & Zéro Faux Positif (Demande Aurelio) ---');
+
+const searchTestWines: Wine[] = [
+  { id: 'w-chapuis-1', domain: 'Chapuis et Chapuis', name: 'Aloxe Corton 1er Cru', vintage: '2023', region: 'Bourgogne', subRegion: 'Côte de Beaune' } as Wine,
+  { id: 'w-chapuis-2', domain: 'Chapuis et Chapuis', name: 'Bourgogne Montrecul', vintage: '2023', region: 'Bourgogne' } as Wine,
+  { id: 'w-chablis-1', domain: 'Château de Béru', name: 'Chablis Côte aux Prêtres', vintage: '2022', region: 'Bourgogne', subRegion: 'Yonne' } as Wine,
+  { id: 'w-chablis-2', domain: "Domaine de L'Enclos", name: 'Chablis 1er Cru', vintage: '2021', region: 'Bourgogne', subRegion: 'Yonne' } as Wine,
+  { id: 'w-charles', domain: 'Domaine Comte Abbatucci', name: 'VDF Faustine', cuvee: 'Jean-Charles Abbatucci', region: 'Corse' } as Wine,
+  { id: 'w-cotton', domain: 'Domaine Pierre Cotton', name: 'Brouilly', vintage: '2020', region: 'Beaujolais' } as Wine,
+  { id: 'w-corton', domain: 'Domaine Chandon de Briailles', name: 'Corton Grand Cru', vintage: '2019', region: 'Bourgogne' } as Wine,
+  { id: 'w-dpr-nsg', domain: 'Domaine Prieuré-Roch', name: 'Nuits-Saint-Georges Clos des Corvées', vintage: '2018', region: 'Bourgogne' } as Wine,
+  { id: 'w-staubin', domain: 'Domaine Hubert Lamy', name: 'Saint-Aubin 1er Cru En Remilly', vintage: '2020', region: 'Bourgogne' } as Wine
+];
+
+// Test 9.1 : Recherche "Chapuis" NE DOIT JAMAIS sortir les Chablis !
+const chapuisHits = searchTestWines.filter(w => matchesWineSearch(w, 'Chapuis'));
+assert(chapuisHits.length === 2, `Recherche "Chapuis" : 2 résultats attendus (reçu: ${chapuisHits.length})`);
+assert(
+  chapuisHits.every(w => w.domain.includes('Chapuis')),
+  'Recherche "Chapuis" ne contient QUE les vins Chapuis'
+);
+assert(
+  !chapuisHits.some(w => w.name.includes('Chablis')),
+  'Zéro Chablis présent dans les résultats de "Chapuis" (Problème oncle Aurelio corrigé !)'
+);
+
+// Test 9.2 : Recherche "Chablis" NE DOIT JAMAIS sortir Abbatucci (Jean-Charles) ni Chapuis
+const chablisHits = searchTestWines.filter(w => matchesWineSearch(w, 'Chablis'));
+assert(chablisHits.length === 2, `Recherche "Chablis" : 2 résultats attendus (reçu: ${chablisHits.length})`);
+assert(
+  chablisHits.every(w => w.name.includes('Chablis')),
+  'Recherche "Chablis" ne contient QUE les vins Chablis'
+);
+
+// Test 9.3 : Recherche "Corton" ne sort PAS Pierre Cotton
+const cortonHits = searchTestWines.filter(w => matchesWineSearch(w, 'Corton'));
+assert(!cortonHits.some(w => w.domain.includes('Cotton')), 'Recherche "Corton" ne confond pas avec Pierre Cotton');
+assert(cortonHits.length === 2, `Recherche "Corton" trouve Aloxe Corton et Corton GC (reçu: ${cortonHits.length})`);
+
+// Test 9.4 : Recherche multi-mots "chapuis aloxe"
+const multiHits = searchTestWines.filter(w => matchesWineSearch(w, 'chapuis aloxe'));
+assert(multiHits.length === 1 && multiHits[0].id === 'w-chapuis-1', 'Recherche multi-mots "chapuis aloxe" cible le vin exact');
+
+// Test 9.5 : Abréviation "st aubin" trouve "Saint-Aubin"
+const stAubinHits = searchTestWines.filter(w => matchesWineSearch(w, 'st aubin'));
+assert(stAubinHits.length === 1 && stAubinHits[0].id === 'w-staubin', 'Recherche abréviation "st aubin" matche "Saint-Aubin"');
+
+// Test 9.6 : Alias "DPR" trouve Domaine Prieuré-Roch
+const dprHits = searchTestWines.filter(w => matchesWineSearch(w, 'dpr'));
+assert(dprHits.length === 1 && dprHits[0].id === 'w-dpr-nsg', 'Recherche alias "DPR" trouve Domaine Prieuré-Roch');
+
+// Test 9.7 : Score de pertinence
+const scoreExact = getWineSearchRelevanceScore(searchTestWines[0], 'Chapuis et Chapuis');
+const scorePartial = getWineSearchRelevanceScore(searchTestWines[0], 'Aloxe');
+assert(scoreExact > scorePartial, `Score pertinence exact (${scoreExact}) > partiel (${scorePartial})`);
 
 console.log('\n====================================================');
 console.log(`📊 BILAN DES TESTS : ${passedTests} / ${totalTests} RÉUSSIS`);

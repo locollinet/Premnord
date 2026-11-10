@@ -900,6 +900,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       'technicalSheet',
       'format',
       'hideFromMenu',
+      'validatedForCarte',
       'isPreSale'
     ];
 

@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
-import { Wine, WineColor, isSameWineReference, getWineReferenceKey, getCanonicalDomain, isDPRWine } from '../types';
-import { matchesWineSearch } from '../lib/stringUtils';
+import { Wine, WineColor, isSameWineReference, getWineReferenceKey, getCanonicalDomain, isDPRWine, isSite6 } from '../types';
+import { matchesWineSearch, getWineSearchRelevanceScore } from '../lib/stringUtils';
 import { classifyWineRegionAndSubRegion } from '../lib/wineGrouping';
 import { exportLiveStockToExcel } from '../lib/accountingExportXlsx';
 import { MultiSiteDispatchModal } from './MultiSiteDispatchModal';
 import { ZeroStockManagementModal } from './ZeroStockManagementModal';
-import { Search, Plus, Filter, ArrowUpDown, ChevronRight, SlidersHorizontal, AlertTriangle, Check, RefreshCw, ArrowRightLeft, FileSpreadsheet, X, Package, Download, Sparkles, Trash2, EyeOff, Scale, RotateCcw, History, ArrowDownRight } from 'lucide-react';
+import { Search, Plus, Filter, ArrowUpDown, ChevronRight, SlidersHorizontal, AlertTriangle, Check, CheckCircle, BookOpen, RefreshCw, ArrowRightLeft, FileSpreadsheet, X, Package, Download, Sparkles, Trash2, EyeOff, Scale, RotateCcw, History, ArrowDownRight } from 'lucide-react';
 import { UndoMovementsModal } from './UndoMovementsModal';
 
 interface WineListProps {
@@ -43,6 +43,7 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
   const [volumeFilterValue, setVolumeFilterValue] = useState<string>('12');
   const [priceFilterType, setPriceFilterType] = useState<'all' | 'less_than' | 'greater_than'>('all');
   const [priceFilterValue, setPriceFilterValue] = useState<string>('');
+  const [carteValidationFilter, setCarteValidationFilter] = useState<'all' | 'validated' | 'not_validated'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'domain' | 'quantity' | 'price' | 'vintage'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   
@@ -380,9 +381,36 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
         matchesDomain = wineDomain === targetDomain || canonicalDomain === targetDomain;
       }
 
-      return matchesSearch && matchesColor && matchesSite && matchesStock && matchesExcludeZero && matchesVolume && matchesPrice && matchesRegion && matchesDomain;
+      // Validation carte filter (Site 6 / Vieillissement)
+      let matchesCarteValidation = true;
+      if (carteValidationFilter === 'validated') {
+        matchesCarteValidation = Boolean(wine.validatedForCarte);
+      } else if (carteValidationFilter === 'not_validated') {
+        matchesCarteValidation = !wine.validatedForCarte;
+      }
+
+      return matchesSearch && matchesColor && matchesSite && matchesStock && matchesExcludeZero && matchesVolume && matchesPrice && matchesRegion && matchesDomain && matchesCarteValidation;
     });
-  }, [wines, sites, searchTerm, selectedColor, searchContext, selectedSite, selectedRegion, selectedDomain, stockFilter, excludeZeroStock, volumeFilterType, volumeFilterValue, priceFilterType, priceFilterValue, wineMatchesRegionFilter, totalStockByRefKey]);
+  }, [wines, sites, searchTerm, selectedColor, searchContext, selectedSite, selectedRegion, selectedDomain, stockFilter, excludeZeroStock, volumeFilterType, volumeFilterValue, priceFilterType, priceFilterValue, carteValidationFilter, wineMatchesRegionFilter, totalStockByRefKey]);
+
+  // Handle direct toggle of carte validation (particularly for Site 6)
+  const handleToggleCarteValidation = async (e: React.MouseEvent, targetWine: Wine) => {
+    e.stopPropagation();
+    const nextVal = !targetWine.validatedForCarte;
+    try {
+      await updateWine(
+        targetWine.id,
+        {
+          validatedForCarte: nextVal,
+          ...(nextVal ? { hideFromMenu: false } : {})
+        },
+        'edit',
+        { propagateReference: true }
+      );
+    } catch (err) {
+      console.error("Erreur lors de la validation carte:", err);
+    }
+  };
 
   // Compute live synthesis metrics for the filtered selection
   const selectionStats = React.useMemo(() => {
@@ -450,6 +478,15 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
   // Sorting Logic
   const sortedWines = React.useMemo(() => {
     return [...filteredWines].sort((a, b) => {
+      // Priorité absolue à la pertinence si une recherche textuelle est saisie
+      if (searchTerm.trim()) {
+        const scoreA = getWineSearchRelevanceScore(a, searchTerm);
+        const scoreB = getWineSearchRelevanceScore(b, searchTerm);
+        if (scoreA !== scoreB) {
+          return scoreB - scoreA;
+        }
+      }
+
       let comparison = 0;
       if (sortBy === 'name') {
         comparison = (a.name || '').localeCompare(b.name || '', 'fr', { sensitivity: 'base' });
@@ -473,7 +510,7 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
 
       return sortOrder === 'asc' ? comparison : -comparison;
     });
-  }, [filteredWines, sortBy, sortOrder]);
+  }, [filteredWines, sortBy, sortOrder, searchTerm]);
 
   // Grouping Logic for "Fiche Référence" (Option A) - De-duplicates references and sums up stocks in multi-site view
   const groupedWines = React.useMemo(() => {
@@ -628,6 +665,22 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
               ))}
             </select>
 
+            {/* Validation Carte filter (notamment pour Site 6 : Vieillissement) */}
+            <select
+              value={carteValidationFilter}
+              onChange={(e) => setCarteValidationFilter(e.target.value as any)}
+              className={`h-11 border text-xs rounded-xl px-3 outline-none cursor-pointer font-semibold transition-colors ${
+                carteValidationFilter !== 'all'
+                  ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold'
+                  : 'bg-slate-50 border-slate-200 text-slate-700 focus:border-red-500'
+              }`}
+              title="Filtrer selon la validation à la carte (Site 6)"
+            >
+              <option value="all">Carte : Tout afficher</option>
+              <option value="validated">✓ Validés à la carte (Site 6)</option>
+              <option value="not_validated">🔒 Non validés (Vieillissement seul)</option>
+            </select>
+
             {/* Colors filter */}
             <select
               value={selectedColor}
@@ -704,8 +757,8 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
               </optgroup>
             </select>
 
-            {/* Bouton de réinitialisation rapide des filtres région / domaine / volume / stock 0 */}
-            {(selectedRegion !== 'all' || selectedDomain !== 'all' || volumeFilterType !== 'all' || excludeZeroStock) && (
+            {/* Bouton de réinitialisation rapide des filtres région / domaine / volume / stock 0 / carte */}
+            {(selectedRegion !== 'all' || selectedDomain !== 'all' || volumeFilterType !== 'all' || excludeZeroStock || carteValidationFilter !== 'all') && (
               <button
                 type="button"
                 onClick={() => {
@@ -714,6 +767,7 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
                   setVolumeFilterType('all');
                   setVolumeFilterValue('12');
                   setExcludeZeroStock(false);
+                  setCarteValidationFilter('all');
                 }}
                 className="h-11 px-2.5 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 text-xs rounded-xl flex items-center gap-1 font-bold transition-all cursor-pointer select-none"
                 title="Effacer les filtres actifs"
@@ -1203,11 +1257,42 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
                 className="bg-white border border-slate-200 hover:border-slate-350 p-4 rounded-2xl shadow-sm flex flex-col justify-between cursor-pointer transition-all duration-150 relative group"
               >
                 <div>
-                  {/* Top row: Coordinates location badge and color badge */}
+                  {/* Top row: Coordinates location badge, color badge, and Site 6 validation button */}
                   <div className="flex justify-between items-center gap-2 mb-3">
-                    <span className="font-mono text-xs font-black bg-slate-900 text-white px-2.5 py-0.5 rounded-lg shadow-sm">
-                      {locationCode}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono text-xs font-black bg-slate-900 text-white px-2.5 py-0.5 rounded-lg shadow-sm">
+                        {locationCode}
+                      </span>
+                      {/* Validation bouton pour les vins en Site 6 */}
+                      {(isSite6(wine.siteId, sites) || group.allWines.some(w => isSite6(w.siteId, sites) && w.quantity > 0)) && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleCarteValidation(e, wine)}
+                          className={`px-2 py-0.5 rounded-lg text-[9px] font-mono font-bold uppercase border transition-all cursor-pointer flex items-center gap-1 shadow-2xs select-none ${
+                            wine.validatedForCarte
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                              : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                          }`}
+                          title={
+                            wine.validatedForCarte
+                              ? "Ce vin en Site 6 (Vieillissement) est validé à la carte. Cliquer pour le retirer."
+                              : "Ce vin est en Site 6. Cliquer pour le valider et le mettre à la carte."
+                          }
+                        >
+                          {wine.validatedForCarte ? (
+                            <>
+                              <CheckCircle className="w-3 h-3 text-emerald-600" />
+                              <span>À la carte</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-3 h-3 text-amber-600" />
+                              <span>+ Valider carte</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                     <span className={`px-2.5 py-0.5 rounded-lg text-[9px] font-mono font-bold uppercase border ${colorDetails.badge}`}>
                       {colorDetails.label}
                     </span>
@@ -1322,6 +1407,25 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
                             </div>
                             
                             <div className="flex items-center gap-2">
+                              {/* Validation bouton pour le vin stocké en Site 6 */}
+                              {isSite6(siteWine.siteId, sites) && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleToggleCarteValidation(e, siteWine)}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border transition-colors cursor-pointer flex items-center gap-0.5 select-none ${
+                                    siteWine.validatedForCarte
+                                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200'
+                                      : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                                  }`}
+                                  title={
+                                    siteWine.validatedForCarte
+                                      ? "Validé à la carte (Site 6) — Cliquer pour retirer"
+                                      : "Valider ce vin en Site 6 pour la carte"
+                                  }
+                                >
+                                  {siteWine.validatedForCarte ? '✓ Carte' : '+ Carte'}
+                                </button>
+                              )}
                               <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${siteStockColor}`}>
                                 {siteWine.quantity} bt{siteWine.quantity > 1 ? 's' : ''}
                               </span>

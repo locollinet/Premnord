@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
-import { Wine, Movement, isSameWineReference, TechnicalSheet } from '../types';
+import { Wine, Movement, isSameWineReference, TechnicalSheet, isSite6 } from '../types';
 import { REASON_LABELS, REASON_BADGE_STYLES } from '../lib/accountingCalculations';
 import { MultiSiteDispatchModal } from './MultiSiteDispatchModal';
 import { 
@@ -280,6 +280,41 @@ export const WineDetailModal: React.FC<WineDetailModalProps> = ({ wineId, onClos
     );
   }, [wines, wine]);
 
+  // Carte validation for Site 6 (Vieillissement)
+  const [isTogglingCarte, setIsTogglingCarte] = useState(false);
+  const [carteSuccessMsg, setCarteSuccessMsg] = useState<string | null>(null);
+
+  const isWineInSite6 = wine ? isSite6(wine.siteId, sites) : false;
+  const hasSiblingInSite6 = wine ? wines.some(w => isSameWineReference(w, wine) && isSite6(w.siteId, sites) && w.quantity > 0) : false;
+  const isSite6Concerned = isWineInSite6 || hasSiblingInSite6;
+
+  const handleToggleCarteValidation = async () => {
+    if (!wine) return;
+    setIsTogglingCarte(true);
+    try {
+      const nextVal = !wine.validatedForCarte;
+      await updateWine(
+        wine.id,
+        {
+          validatedForCarte: nextVal,
+          ...(nextVal ? { hideFromMenu: false } : {})
+        },
+        'edit',
+        { propagateReference: true }
+      );
+      setCarteSuccessMsg(
+        nextVal
+          ? "Ce vin de Site 6 a été validé avec succès pour la carte des vins !"
+          : "Validation carte retirée pour ce vin de Site 6 (maintenu en vieillissement)."
+      );
+      setTimeout(() => setCarteSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error("Erreur lors de la validation carte:", err);
+    } finally {
+      setIsTogglingCarte(false);
+    }
+  };
+
   const handleQuickSaveLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wine) return;
@@ -451,6 +486,15 @@ export const WineDetailModal: React.FC<WineDetailModalProps> = ({ wineId, onClos
                   <VerifiedIcon className="w-3 h-3 text-emerald-600" /> Fiche Activée
                 </span>
               )}
+              {isWineInSite6 && (
+                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border flex items-center gap-1 uppercase ${
+                  wine.validatedForCarte
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                }`}>
+                  {wine.validatedForCarte ? '✓ Site 6 à la carte' : '🔒 Site 6 Vieillissement'}
+                </span>
+              )}
             </div>
             <h2 className="text-xl font-serif font-bold text-slate-900 leading-tight">{wine.name}</h2>
             <p className="text-sm font-semibold text-slate-600 italic mt-0.5">{wine.domain}</p>
@@ -504,6 +548,76 @@ export const WineDetailModal: React.FC<WineDetailModalProps> = ({ wineId, onClos
 
         {/* Scrollable Content Container */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6">
+
+          {/* Validation Carte Banner for Site 6 (Vieillissement) */}
+          {isSite6Concerned && (
+            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all shadow-2xs ${
+              wine.validatedForCarte
+                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                : 'bg-amber-50/90 border-amber-300 text-amber-950'
+            }`}>
+              <div className="flex items-start gap-3 min-w-0">
+                <div className={`p-2.5 rounded-xl shrink-0 ${
+                  wine.validatedForCarte ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold font-mono uppercase tracking-wider">
+                      {wine.validatedForCarte ? '✓ Validé pour la carte des vins' : '🔒 Site 6 : Cave de Vieillissement'}
+                    </span>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border ${
+                      wine.validatedForCarte
+                        ? 'bg-emerald-100/80 border-emerald-300 text-emerald-900'
+                        : 'bg-amber-100/80 border-amber-300 text-amber-900'
+                    }`}>
+                      {isWineInSite6 ? 'Stocké en Site 6' : 'Stock partagé en Site 6'}
+                    </span>
+                  </div>
+                  <p className="text-xs opacity-90 leading-relaxed font-sans">
+                    {wine.validatedForCarte
+                      ? 'Ce vin est en cave de vieillissement (Site 6), mais il a été VALIDÉ pour être proposé à la carte et servi aux clients du restaurant.'
+                      : 'Ce vin est en cave de vieillissement (Site 6). Par défaut, il n\'est pas proposé aux clients sur la carte des vins.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                <button
+                  type="button"
+                  disabled={isTogglingCarte}
+                  onClick={handleToggleCarteValidation}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer flex items-center gap-2 shadow-xs select-none ${
+                    wine.validatedForCarte
+                      ? 'bg-white hover:bg-rose-50 text-rose-700 border border-rose-300'
+                      : 'bg-[#A4513C] hover:bg-[#8D4432] text-white shadow-sm'
+                  }`}
+                >
+                  {isTogglingCarte ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : wine.validatedForCarte ? (
+                    <>
+                      <X className="w-3.5 h-3.5" />
+                      <span>Retirer de la carte</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>Valider à la carte</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {carteSuccessMsg && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2 animate-fade-in">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{carteSuccessMsg}</span>
+            </div>
+          )}
 
           {/* TAB 1: TECHNICAL SHEET */}
           {activeTab === 'tech' && (

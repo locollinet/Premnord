@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
-import { Wine, WineColor, isSameWineReference, getWineReferenceKey } from '../types';
-import { matchesWineSearch } from '../lib/stringUtils';
+import { Wine, WineColor, isSameWineReference, getWineReferenceKey, isSite6 } from '../types';
+import { matchesWineSearch, getWineSearchRelevanceScore } from '../lib/stringUtils';
 import { MultiSiteDispatchModal } from './MultiSiteDispatchModal';
 import { WineFormModal } from './WineFormModal';
 import { 
@@ -132,6 +132,13 @@ export const MobileInventory: React.FC = () => {
     });
 
     return list.sort((a, b) => {
+      if (searchTerm.trim()) {
+        const scoreA = getWineSearchRelevanceScore(a, searchTerm);
+        const scoreB = getWineSearchRelevanceScore(b, searchTerm);
+        if (scoreA !== scoreB) {
+          return scoreB - scoreA;
+        }
+      }
       let cmp = 0;
       if (sortBy === 'name') {
         cmp = frCollator.compare(a.name || '', b.name || '');
@@ -681,6 +688,30 @@ export const MobileInventory: React.FC = () => {
                         <span className="text-[10px] font-mono font-bold bg-slate-900 text-white px-2 py-0.5 rounded-lg shrink-0" title={site?.name}>
                           {site?.name?.split(' - ')[0]} • {locationBadge}
                         </span>
+                        {isSite6(wine, sites) && (
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await updateWine(wine.id, { validatedForCarte: !wine.validatedForCarte });
+                            }}
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold flex items-center gap-1 transition-colors cursor-pointer select-none ${
+                              wine.validatedForCarte
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}
+                            title={wine.validatedForCarte ? 'Bouteille en Site 6 validée pour la carte (cliquer pour retirer)' : 'Bouteille en Site 6 non validée (cliquer pour valider à la carte)'}
+                          >
+                            {wine.validatedForCarte ? (
+                              <>
+                                <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                <span>✓ Carte</span>
+                              </>
+                            ) : (
+                              <span>+ Carte</span>
+                            )}
+                          </button>
+                        )}
                         <h4 className="text-sm font-bold text-slate-900 truncate">{wine.name}</h4>
                         <span className="text-[10px] font-mono text-slate-400">({wine.vintage})</span>
                       </div>
