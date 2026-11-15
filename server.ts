@@ -983,7 +983,9 @@ Extrais rigoureusement les informations dans l'objet JSON structuré suivant :
     const vite = await createViteServer({
       server: { 
         middlewareMode: true,
-        hmr: false
+        hmr: false,
+        ws: false,
+        watch: null
       },
       appType: "spa",
     });
