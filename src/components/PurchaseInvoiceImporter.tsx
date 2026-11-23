@@ -1,9 +1,10 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { useFirebase } from '../context/FirebaseContext';
+import { useFirebase, StockOperation } from '../context/FirebaseContext';
 import { Wine, WineColor, Site, getCanonicalDomain, normalizeWineString, isSameWineReference } from '../types';
 import { calculateSellingPrice } from '../lib/pricing';
 import { findBestWineMatchInCatalog, findSmartWineMatchWithTypo, WineTypoSuggestion, normalizeVintage } from '../lib/wineMatching';
 import { matchesWineSearch, getWineSearchRelevanceScore } from '../lib/stringUtils';
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import * as XLSX from 'xlsx';
 import { 
   Truck, 
@@ -470,7 +471,7 @@ interface PurchaseInvoiceImporterProps {
 }
 
 export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = ({ onClose, onSuccess }) => {
-  const { wines, sites, updateWine, addWine, addMovement, user } = useFirebase();
+  const { wines, sites, addWine, recordStockOperations, user } = useFirebase();
 
   const [importMode, setImportMode] = useState<'pdf' | 'excel' | 'text'>('pdf');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -483,6 +484,7 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
     newRefsCount: number;
     totalShippingAdded?: number;
     totalInvoiceHt?: number;
+    synced?: boolean;
   } | null>(null);
 
   // File uploads
@@ -637,14 +639,14 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
         setAnalysisProgress('Extraction et rapprochement avec le catalogue...');
         let usedAi = false;
         try {
-          const res = await fetch('/api/gemini/parse-purchase-invoice', {
+          const res = await fetchWithTimeout('/api/gemini/parse-purchase-invoice', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               rawRows: jsonRows.slice(0, 150),
               existingCatalog: catalogForAi
             })
-          });
+          }, 65000);
           if (res.ok) {
             const data = await res.json();
             if (data && Array.isArray(data.items) && data.items.length > 0) {
@@ -686,14 +688,14 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
         setAnalysisProgress('Analyse du document et extraction des données...');
         let apiSucceeded = false;
         try {
-          const res = await fetch('/api/gemini/parse-purchase-invoice', {
+          const res = await fetchWithTimeout('/api/gemini/parse-purchase-invoice', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               pdfBase64: base64Pdf,
               existingCatalog: catalogForAi
             })
-          });
+          }, 65000);
 
           if (res.ok) {
             const data = await res.json();
@@ -756,14 +758,14 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
         setAnalysisProgress('Analyse du texte brut...');
         let usedAi = false;
         try {
-          const res = await fetch('/api/gemini/parse-purchase-invoice', {
+          const res = await fetchWithTimeout('/api/gemini/parse-purchase-invoice', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               rawText: rawText.trim(),
               existingCatalog: catalogForAi
             })
-          });
+          }, 65000);
           if (res.ok) {
             const data = await res.json();
             if (data && Array.isArray(data.items) && data.items.length > 0) {
@@ -1131,6 +1133,9 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
       const runningStockMap = new Map<string, number>();
       wines.forEach(w => runningStockMap.set(w.id, w.quantity));
 
+      const ops: StockOperation[] = [];
+      const invoiceTs = new Date(`${invoiceDate}T12:00:00`).getTime() || Date.now();
+
       for (const item of itemsToReceive) {
         let finalWineId = item.selectedWineId;
 
@@ -1153,6 +1158,7 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
           if (existing) {
             let targetWineId = existing.id;
             const isAtTargetSite = existing.siteId === item.targetSiteId;
+            let wineUpdates: Partial<Wine> | undefined;
 
             if (isAtTargetSite) {
               const currentStock = runningStockMap.get(existing.id) ?? existing.quantity;
@@ -1162,13 +1168,12 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
               const updatedPort = item.shippingCostPerUnit !== undefined ? item.shippingCostPerUnit : (existing.shippingCost || 0);
               const updatedBuy = updatedHt !== undefined ? Math.round((updatedHt + updatedPort) * 100) / 100 : existing.priceBuy;
 
-              await updateWine(existing.id, {
+              wineUpdates = {
                 quantity: newQty,
                 priceBuyHt: updatedHt,
                 shippingCost: updatedPort,
-                priceBuy: updatedBuy,
-                updatedAt: Date.now()
-              }, 'stock');
+                priceBuy: updatedBuy
+              };
             } else {
               // Existing reference is at another site. Check if it ALSO exists at item.targetSiteId
               const matchAtTarget = wines.find(w => w.siteId === item.targetSiteId && isSameWineReference(w, existing));
@@ -1181,13 +1186,12 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
                 const updatedPort = item.shippingCostPerUnit !== undefined ? item.shippingCostPerUnit : (matchAtTarget.shippingCost || 0);
                 const updatedBuy = updatedHt !== undefined ? Math.round((updatedHt + updatedPort) * 100) / 100 : matchAtTarget.priceBuy;
 
-                await updateWine(matchAtTarget.id, {
+                wineUpdates = {
                   quantity: newQty,
                   priceBuyHt: updatedHt,
                   shippingCost: updatedPort,
-                  priceBuy: updatedBuy,
-                  updatedAt: Date.now()
-                }, 'stock');
+                  priceBuy: updatedBuy
+                };
               } else {
                 // Clone the reference to the designated site with the new quantity, keeping all metadata
                 const unitHt = item.priceBuyHt !== undefined && item.priceBuyHt > 0 ? item.priceBuyHt : existing.priceBuyHt;
@@ -1221,17 +1225,21 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
               }
             }
 
-            await addMovement({
+            ops.push({
               wineId: targetWineId,
-              wineName: `${existing.domain} - ${existing.name} (${existing.vintage || 'S.A.'})`,
-              type: 'in',
-              quantity: item.quantity,
-              toSiteId: item.targetSiteId,
-              reason: 'livraison',
-              notes: `Réception facture ${supplierName ? `${supplierName} ` : ''}${invoiceNumber ? `#${invoiceNumber}` : ''} du ${invoiceDate}`,
-              userId: user?.uid,
-              userName: user?.displayName || user?.email || 'Gestionnaire',
-              createdAt: new Date(`${invoiceDate}T12:00:00`).getTime() || Date.now()
+              wineUpdates,
+              movement: {
+                wineId: targetWineId,
+                wineName: `${existing.domain} - ${existing.name} (${existing.vintage || 'S.A.'})`,
+                type: 'in',
+                quantity: item.quantity,
+                toSiteId: item.targetSiteId,
+                reason: 'livraison',
+                notes: `Réception facture ${supplierName ? `${supplierName} ` : ''}${invoiceNumber ? `#${invoiceNumber}` : ''} du ${invoiceDate}`,
+                userId: user?.uid,
+                userName: user?.displayName || user?.email || 'Gestionnaire',
+                createdAt: invoiceTs
+              }
             });
           }
         } 
@@ -1260,21 +1268,30 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
           const newCreatedWineId = await addWine(newWineData as any);
           newRefsCreated += 1;
 
-          await addMovement({
+          ops.push({
             wineId: newCreatedWineId,
-            wineName: `${item.domain} - ${item.wineName} (${item.vintage || 'S.A.'})`,
-            type: 'in',
-            quantity: item.quantity,
-            toSiteId: item.targetSiteId,
-            reason: 'livraison',
-            notes: `Création & Réception facture ${supplierName ? `${supplierName} ` : ''}${invoiceNumber ? `#${invoiceNumber}` : ''}`,
-            userId: user?.uid,
-            userName: user?.displayName || user?.email || 'Gestionnaire',
-            createdAt: new Date(`${invoiceDate}T12:00:00`).getTime() || Date.now()
+            movement: {
+              wineId: newCreatedWineId,
+              wineName: `${item.domain} - ${item.wineName} (${item.vintage || 'S.A.'})`,
+              type: 'in',
+              quantity: item.quantity,
+              toSiteId: item.targetSiteId,
+              reason: 'livraison',
+              notes: `Création & Réception facture ${supplierName ? `${supplierName} ` : ''}${invoiceNumber ? `#${invoiceNumber}` : ''}`,
+              userId: user?.uid,
+              userName: user?.displayName || user?.email || 'Gestionnaire',
+              createdAt: invoiceTs
+            }
           });
         }
 
         totalQtyAdded += item.quantity;
+      }
+
+      let synced = true;
+      if (ops.length > 0) {
+        const res = await recordStockOperations(ops);
+        synced = res.synced;
       }
 
       setSuccessSummary({
@@ -1282,7 +1299,8 @@ export const PurchaseInvoiceImporter: React.FC<PurchaseInvoiceImporterProps> = (
         linesCount: itemsToReceive.length,
         newRefsCount: newRefsCreated,
         totalShippingAdded: kpis.totalShippingHt,
-        totalInvoiceHt: kpis.totalAmountWithShippingHt
+        totalInvoiceHt: kpis.totalAmountWithShippingHt,
+        synced
       });
       setStep('confirmed');
 
@@ -2094,6 +2112,12 @@ Domaine Roulot - Meursault Luchets 2021 - 6 bt - 110.00€ HT"
                   Frais de port intégrés aux coûts de revient : <strong>{successSummary.totalShippingAdded.toFixed(2)} € HT</strong> (Total facture : <strong>{successSummary.totalInvoiceHt?.toFixed(2)} € HT</strong>)
                 </span>
               </div>
+            )}
+
+            {successSummary.synced === false && (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 font-medium">
+                Connexion faible détectée : les entrées en stock ont été enregistrées localement et se synchroniseront automatiquement avec le cloud dès le retour du réseau.
+              </p>
             )}
           </div>
           <div className="pt-4 flex justify-center gap-3">

@@ -22,6 +22,7 @@ import { DuplicateInspectionModal } from './DuplicateInspectionModal';
 import { RegionManagement } from './RegionManagement';
 import { ZeroStockManagementModal } from './ZeroStockManagementModal';
 import { Wine } from '../types';
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 
 export const Settings: React.FC = () => {
   const { 
@@ -326,52 +327,55 @@ export const Settings: React.FC = () => {
     if (pendingWines.length === 0) return;
     setBulkGenerating(true);
     setBulkProgressLogs([]);
-    
-    for (let i = 0; i < pendingWines.length; i++) {
-      const currentWine = pendingWines[i];
-      setCurrentWineIndex(i);
-      
-      const logMsg = `[${i + 1}/${pendingWines.length}] Génération de la fiche pour ${currentWine.name} (${currentWine.domain} - ${currentWine.vintage})...`;
-      setBulkProgressLogs(prev => [logMsg, ...prev]);
-      
-      try {
-        const response = await fetch('/api/gemini/generate-technical-sheet', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            wineName: currentWine.appellation || currentWine.name,
-            domain: currentWine.domain,
-            vintage: currentWine.vintage,
-            color: currentWine.color,
-            region: currentWine.region || ''
-          })
-        });
 
-        if (!response.ok) {
-          throw new Error(`Erreur serveur (${response.status})`);
+    try {
+      for (let i = 0; i < pendingWines.length; i++) {
+        const currentWine = pendingWines[i];
+        setCurrentWineIndex(i);
+        
+        const logMsg = `[${i + 1}/${pendingWines.length}] Génération de la fiche pour ${currentWine.name} (${currentWine.domain} - ${currentWine.vintage})...`;
+        setBulkProgressLogs(prev => [logMsg, ...prev]);
+        
+        try {
+          const response = await fetchWithTimeout('/api/gemini/generate-technical-sheet', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              wineName: currentWine.appellation || currentWine.name,
+              domain: currentWine.domain,
+              vintage: currentWine.vintage,
+              color: currentWine.color,
+              region: currentWine.region || ''
+            })
+          }, 50000);
+
+          if (!response.ok) {
+            throw new Error(`Erreur serveur (${response.status})`);
+          }
+
+          const data = await response.json();
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          await updateWine(currentWine.id, { technicalSheet: { ...data, hasGenerated: true } }, 'edit');
+          setBulkProgressLogs(prev => [`✅ Succès : ${currentWine.name}`, ...prev]);
+        } catch (err: any) {
+          console.error(err);
+          setBulkProgressLogs(prev => [`❌ Échec : ${currentWine.name} (${err.message || "Erreur de service"})`, ...prev]);
         }
-
-        const data = await response.json();
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        await updateWine(currentWine.id, { technicalSheet: { ...data, hasGenerated: true } }, 'edit');
-        setBulkProgressLogs(prev => [`✅ Succès : ${currentWine.name}`, ...prev]);
-      } catch (err: any) {
-        console.error(err);
-        setBulkProgressLogs(prev => [`❌ Échec : ${currentWine.name} (${err.message || "Erreur de service"})`, ...prev]);
+        
+        // Delay to avoid aggressive rate limit
+        await new Promise(resolve => setTimeout(resolve, 800));
       }
-      
-      // Delay to avoid aggressive rate limit
-      await new Promise(resolve => setTimeout(resolve, 800));
+
+      setSuccessMsg("La génération en masse des fiches techniques est terminée !");
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } finally {
+      setBulkGenerating(false);
     }
-    
-    setBulkGenerating(false);
-    setSuccessMsg("La génération en masse des fiches techniques est terminée !");
-    setTimeout(() => setSuccessMsg(null), 4000);
   };
 
   return (

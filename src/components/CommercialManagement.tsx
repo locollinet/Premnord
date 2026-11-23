@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { useFirebase } from '../context/FirebaseContext';
+import { useFirebase, StockOperation } from '../context/FirebaseContext';
 import { Wine, WineColor, TechnicalSheet } from '../types';
 import { matchesWineSearch } from '../lib/stringUtils';
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import { PosSalesImporter } from './PosSalesImporter';
 import { PurchaseInvoiceImporter } from './PurchaseInvoiceImporter';
 import { 
@@ -133,7 +134,8 @@ interface CommercialManagementProps {
 }
 
 export const CommercialManagement: React.FC<CommercialManagementProps> = ({ onNavigateToAccounting }) => {
-  const { wines, sites, updateWine, addMovement, apply3TierPricingToAllWines } = useFirebase();
+  const { wines, sites, updateWine, recordStockOperations, apply3TierPricingToAllWines } = useFirebase();
+  const [receivingSupplier, setReceivingSupplier] = useState<string | null>(null);
 
   // Local sub-tabs: 'valuation' | 'pos_sales' | 'purchase_invoices' | 'sheets' | 'orders'
   const [activeSubTab, setActiveSubTab] = useState<'valuation' | 'pos_sales' | 'purchase_invoices' | 'sheets' | 'orders'>('valuation');
@@ -244,7 +246,7 @@ export const CommercialManagement: React.FC<CommercialManagementProps> = ({ onNa
     setIsGeneratingNotes(true);
     setGenerationError(null);
     try {
-      const response = await fetch('/api/gemini/generate-sheet', {
+      const response = await fetchWithTimeout('/api/gemini/generate-sheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -254,7 +256,7 @@ export const CommercialManagement: React.FC<CommercialManagementProps> = ({ onNa
           color: selectedSheetWine.color,
           region: selectedSheetWine.region
         })
-      });
+      }, 45000);
       let errorMsg = 'Une erreur est survenue lors de la communication avec le serveur Gemini.';
       if (!response.ok) {
         try {
@@ -299,7 +301,7 @@ export const CommercialManagement: React.FC<CommercialManagementProps> = ({ onNa
     setIsGeneratingNotes(true);
     setGenerationError(null);
     try {
-      const response = await fetch('/api/gemini/generate-technical-sheet', {
+      const response = await fetchWithTimeout('/api/gemini/generate-technical-sheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -310,7 +312,7 @@ export const CommercialManagement: React.FC<CommercialManagementProps> = ({ onNa
           color: selectedSheetWine.color,
           region: selectedSheetWine.region || ''
         })
-      });
+      }, 50000);
 
       let errorMsg = 'Une erreur est survenue lors de la communication avec le serveur.';
       if (!response.ok) {
@@ -353,13 +355,13 @@ export const CommercialManagement: React.FC<CommercialManagementProps> = ({ onNa
     setIsExtractingText(true);
     setGenerationError(null);
     try {
-      const response = await fetch('/api/gemini/extract-technical-sheet', {
+      const response = await fetchWithTimeout('/api/gemini/extract-technical-sheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rawText: rawTextToExtract
         })
-      });
+      }, 50000);
 
       let errorMsg = "Une erreur est survenue lors de l'analyse du texte.";
       if (!response.ok) {
@@ -522,32 +524,38 @@ export const CommercialManagement: React.FC<CommercialManagementProps> = ({ onNa
   // Confirm receipt of active delivery & automatically add to Firestore live database with historic Movement
   const confirmReceipt = async (supplier: string) => {
     const orderDetails = activeSupplierOrders[supplier];
-    if (!orderDetails) return;
+    if (!orderDetails || receivingSupplier) return;
 
+    setReceivingSupplier(supplier);
     try {
+      const ops: StockOperation[] = [];
       for (const item of orderDetails.items) {
-        // Find existing wine record
         const wineRef = wines.find(w => w.id === item.wineId);
         if (wineRef) {
           const updatedQty = wineRef.quantity + item.qtyToOrder;
-          
-          // 1. Update in Firestore
-          await updateWine(item.wineId, { quantity: updatedQty }, 'stock');
-
-          // 2. Add delivery audit movement
-          await addMovement({
+          ops.push({
             wineId: item.wineId,
-            wineName: `${item.wineName} (${item.vintage})`,
-            type: 'in',
-            quantity: item.qtyToOrder,
-            reason: 'livraison',
-            notes: `Réception de commande automatisée via le Carnet de Commande (Domaine ${supplier}).`,
-            toSiteId: item.siteId
+            wineUpdates: { quantity: updatedQty },
+            movement: {
+              wineId: item.wineId,
+              wineName: `${item.wineName} (${item.vintage})`,
+              type: 'in',
+              quantity: item.qtyToOrder,
+              reason: 'livraison',
+              notes: `Réception de commande automatisée via le Carnet de Commande (Domaine ${supplier}).`,
+              toSiteId: item.siteId
+            }
           });
         }
       }
 
-      setReceivedSuccessMsg(`Félicitations ! Les stocks des bouteilles commandées chez "${supplier}" ont été réintégrés avec succès dans vos sites respectifs.`);
+      const { synced } = await recordStockOperations(ops);
+
+      setReceivedSuccessMsg(
+        synced
+          ? `Félicitations ! Les stocks des bouteilles commandées chez "${supplier}" ont été réintégrés avec succès dans vos sites respectifs.`
+          : `Livraison "${supplier}" enregistrée localement (synchronisation cloud automatique dès retour réseau).`
+      );
       setActiveSupplierOrders(prev => {
         const copy = { ...prev };
         delete copy[supplier];
@@ -558,6 +566,8 @@ export const CommercialManagement: React.FC<CommercialManagementProps> = ({ onNa
     } catch (e) {
       console.error("Error receiving order deliveries:", e);
       alert("Erreur lors de l'intégration de la livraison.");
+    } finally {
+      setReceivingSupplier(null);
     }
   };
 
@@ -1856,10 +1866,11 @@ export const CommercialManagement: React.FC<CommercialManagementProps> = ({ onNa
 
                             <button
                               onClick={() => confirmReceipt(supplier)}
-                              className="flex-1 h-9 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-mono text-[10px] uppercase font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-colors"
+                              disabled={receivingSupplier === supplier}
+                              className="flex-1 h-9 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-xl font-mono text-[10px] uppercase font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-colors"
                             >
                               <Check className="w-3.5 h-3.5 text-white" />
-                              Livraison Reçue
+                              {receivingSupplier === supplier ? 'Enregistrement...' : 'Livraison Reçue'}
                             </button>
                           </div>
 

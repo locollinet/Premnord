@@ -612,7 +612,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           createdAt: Date.now()
         }));
       });
-      await batch.commit();
+      await commitFirestoreWrite(batch.commit());
     } catch (e) {
       console.error("Error bootstrapping sites:", e);
     }
@@ -622,11 +622,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const bootstrapDefaultRegions = async (firestoreDb: Firestore) => {
     try {
       const docRef = doc(firestoreDb, 'settings', 'regions');
-      await setDoc(docRef, {
+      await commitFirestoreWrite(setDoc(docRef, {
         regions: DEFAULT_WINE_REGIONS,
         groups: DEFAULT_REGION_GROUPS,
         updatedAt: Date.now()
-      });
+      }));
       setRegions(DEFAULT_WINE_REGIONS);
       regionsStateRef.current = DEFAULT_WINE_REGIONS;
       setRegionGroups(DEFAULT_REGION_GROUPS);
@@ -1042,7 +1042,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const path = `wines/${id}`;
     try {
       const db = getFirebaseDb();
-      await deleteDoc(doc(db, 'wines', id));
+      reportWriteStatus(await commitFirestoreWrite(deleteDoc(doc(db, 'wines', id))));
     } catch (err) {
       // Revert local state on failure
       winesStateRef.current = previousWines;
@@ -1076,7 +1076,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         chunk.forEach(id => {
           batch.delete(doc(db, 'wines', id));
         });
-        await batch.commit();
+        reportWriteStatus(await commitFirestoreWrite(batch.commit()));
         i += 400;
       }
       return ids.length;
@@ -1091,7 +1091,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // --- SITE MUTATIONS ---
   const addSite = async (name: string, description?: string): Promise<string> => {
-    const id = `site_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    const id = `site_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const now = Date.now();
     const newSite: Site = {
       id,
@@ -1109,7 +1109,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const path = `sites/${id}`;
     try {
       const db = getFirebaseDb();
-      await setDoc(doc(db, 'sites', id), cleanUndefined(newSite));
+      reportWriteStatus(await commitFirestoreWrite(setDoc(doc(db, 'sites', id), cleanUndefined(newSite))));
       return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
@@ -1132,10 +1132,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const path = `sites/${id}`;
     try {
       const db = getFirebaseDb();
-      await updateDoc(doc(db, 'sites', id), cleanUndefined({
+      reportWriteStatus(await commitFirestoreWrite(updateDoc(doc(db, 'sites', id), cleanUndefined({
         name,
         description
-      }));
+      }))));
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
       throw err;
@@ -1158,7 +1158,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const path = `sites/${id}`;
     try {
       const db = getFirebaseDb();
-      await deleteDoc(doc(db, 'sites', id));
+      reportWriteStatus(await commitFirestoreWrite(deleteDoc(doc(db, 'sites', id))));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
       throw err;
@@ -1654,59 +1654,65 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return;
       }
 
-      // 1. Sync Sites
+      // 1. Sync Sites (chunked by 400)
       if (storedSites) {
         const localSites: Site[] = JSON.parse(storedSites);
-        const batch = writeBatch(db);
-        localSites.forEach((site) => {
-          const docRef = doc(collection(db, 'sites'), site.id);
-          batch.set(docRef, cleanUndefined({
-            ...site,
-            createdAt: site.createdAt || Date.now()
-          }), { merge: true });
-        });
-        await batch.commit();
+        for (let i = 0; i < localSites.length; i += 400) {
+          const batch = writeBatch(db);
+          localSites.slice(i, i + 400).forEach((site) => {
+            const docRef = doc(collection(db, 'sites'), site.id);
+            batch.set(docRef, cleanUndefined({
+              ...site,
+              createdAt: site.createdAt || Date.now()
+            }), { merge: true });
+          });
+          reportWriteStatus(await commitFirestoreWrite(batch.commit()));
+        }
       }
 
-      // 2. Sync Wines
+      // 2. Sync Wines (chunked by 400)
       if (storedWines) {
         const localWines: Wine[] = JSON.parse(storedWines);
-        const batch = writeBatch(db);
         const remoteWines = winesStateRef.current;
 
-        localWines.forEach((wine) => {
-          // See if there is a remote wine with the exact same name, domain, vintage, color, and siteId
-          const duplicateInRemote = remoteWines.find(rw => 
-            (rw.name || '').trim().toLowerCase() === (wine.name || '').trim().toLowerCase() &&
-            (rw.domain || '').trim().toLowerCase() === (wine.domain || '').trim().toLowerCase() &&
-            (rw.vintage || '').trim().toLowerCase() === (wine.vintage || '').trim().toLowerCase() &&
-            (rw.color || '').toLowerCase() === (wine.color || '').toLowerCase() &&
-            rw.siteId === wine.siteId
-          );
+        for (let i = 0; i < localWines.length; i += 400) {
+          const batch = writeBatch(db);
+          localWines.slice(i, i + 400).forEach((wine) => {
+            // See if there is a remote wine with the exact same name, domain, vintage, color, and siteId
+            const duplicateInRemote = remoteWines.find(rw => 
+              (rw.name || '').trim().toLowerCase() === (wine.name || '').trim().toLowerCase() &&
+              (rw.domain || '').trim().toLowerCase() === (wine.domain || '').trim().toLowerCase() &&
+              (rw.vintage || '').trim().toLowerCase() === (wine.vintage || '').trim().toLowerCase() &&
+              (rw.color || '').toLowerCase() === (wine.color || '').toLowerCase() &&
+              rw.siteId === wine.siteId
+            );
 
-          if (duplicateInRemote) {
-            const docRef = doc(collection(db, 'wines'), duplicateInRemote.id);
-            batch.set(docRef, cleanUndefined({
-              quantity: duplicateInRemote.quantity + wine.quantity,
-              updatedAt: Date.now()
-            }), { merge: true });
-          } else {
-            const docRef = doc(collection(db, 'wines'), wine.id);
-            batch.set(docRef, cleanUndefined(wine), { merge: true });
-          }
-        });
-        await batch.commit();
+            if (duplicateInRemote) {
+              const docRef = doc(collection(db, 'wines'), duplicateInRemote.id);
+              batch.set(docRef, cleanUndefined({
+                quantity: duplicateInRemote.quantity + wine.quantity,
+                updatedAt: Date.now()
+              }), { merge: true });
+            } else {
+              const docRef = doc(collection(db, 'wines'), wine.id);
+              batch.set(docRef, cleanUndefined(wine), { merge: true });
+            }
+          });
+          reportWriteStatus(await commitFirestoreWrite(batch.commit()));
+        }
       }
 
-      // 3. Sync Movements
+      // 3. Sync Movements (chunked by 400)
       if (storedMovements) {
         const localMovements: Movement[] = JSON.parse(storedMovements);
-        const batch = writeBatch(db);
-        localMovements.forEach((mov) => {
-          const docRef = doc(collection(db, 'movements'), mov.id);
-          batch.set(docRef, cleanUndefined(mov), { merge: true });
-        });
-        await batch.commit();
+        for (let i = 0; i < localMovements.length; i += 400) {
+          const batch = writeBatch(db);
+          localMovements.slice(i, i + 400).forEach((mov) => {
+            const docRef = doc(collection(db, 'movements'), mov.id);
+            batch.set(docRef, cleanUndefined(mov), { merge: true });
+          });
+          reportWriteStatus(await commitFirestoreWrite(batch.commit()));
+        }
       }
 
       // Clear local storage keys
@@ -1774,7 +1780,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         chunk.forEach(id => {
           batch.delete(doc(db, 'wines', id));
         });
-        await batch.commit();
+        reportWriteStatus(await commitFirestoreWrite(batch.commit()));
         i += 400;
       }
     } catch (err) {
@@ -1886,7 +1892,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           opsInBatch++;
 
           if (opsInBatch >= 400) {
-            await currentBatch.commit();
+            reportWriteStatus(await commitFirestoreWrite(currentBatch.commit()));
             currentBatch = writeBatch(db);
             opsInBatch = 0;
           }
@@ -1896,7 +1902,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       if (opsInBatch > 0) {
-        await currentBatch.commit();
+        reportWriteStatus(await commitFirestoreWrite(currentBatch.commit()));
       }
 
       // Optimistically update local wines state
@@ -2015,12 +2021,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setWines(updatedWines);
       } else {
         const db = getFirebaseDb();
-        const batch = writeBatch(db);
-        modifications.forEach(({ id, updates }) => {
-          const docRef = doc(db, 'wines', id);
-          batch.set(docRef, updates, { merge: true });
-        });
-        await batch.commit();
+        for (let i = 0; i < modifications.length; i += 400) {
+          const batch = writeBatch(db);
+          modifications.slice(i, i + 400).forEach(({ id, updates }) => {
+            const docRef = doc(db, 'wines', id);
+            batch.set(docRef, updates, { merge: true });
+          });
+          reportWriteStatus(await commitFirestoreWrite(batch.commit()));
+        }
         winesStateRef.current = updatedWines;
         setWines(updatedWines);
       }
@@ -2072,7 +2080,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const docRef = doc(db, 'wines', id);
             batch.update(docRef, cleanUndefined(updates));
           });
-          await batch.commit();
+          reportWriteStatus(await commitFirestoreWrite(batch.commit()));
           i += 400;
         }
         winesStateRef.current = updatedWines;
@@ -2109,7 +2117,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const docRef = doc(db, 'wines', w.id);
           batch.update(docRef, { quantity: 0, bin: '', updatedAt: now });
         });
-        await batch.commit();
+        reportWriteStatus(await commitFirestoreWrite(batch.commit()));
         i += 400;
       }
       winesStateRef.current = updatedWines;
@@ -2131,7 +2139,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const db = getFirebaseDb();
         const brandingDocRef = doc(db, 'settings', 'branding');
-        await setDoc(brandingDocRef, { logo, updatedAt: Date.now() }, { merge: true });
+        reportWriteStatus(await commitFirestoreWrite(setDoc(brandingDocRef, { logo, updatedAt: Date.now() }, { merge: true })));
       } catch (err) {
         console.error("Error saving branding logo to Firestore:", err);
         // Fallback to local storage if needed
@@ -2156,7 +2164,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const db = getFirebaseDb();
         const brandingDocRef = doc(db, 'settings', 'branding');
-        await setDoc(brandingDocRef, { watermark, updatedAt: Date.now() }, { merge: true });
+        reportWriteStatus(await commitFirestoreWrite(setDoc(brandingDocRef, { watermark, updatedAt: Date.now() }, { merge: true })));
       } catch (err) {
         console.error("Error saving watermark logo to Firestore:", err);
         // Fallback to local storage if needed
@@ -2197,7 +2205,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             batch.delete(doc(db, 'movements', d.id));
           });
           try {
-            await batch.commit();
+            reportWriteStatus(await commitFirestoreWrite(batch.commit()));
           } catch (err) {
             handleFirestoreError(err, OperationType.DELETE, 'movements');
             throw err;
@@ -2251,7 +2259,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             batch.delete(doc(db, path, d.id));
           });
           try {
-            await batch.commit();
+            reportWriteStatus(await commitFirestoreWrite(batch.commit()));
           } catch (err) {
             handleFirestoreError(err, OperationType.DELETE, path);
             throw err;
@@ -2311,11 +2319,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!isDemo && user) {
       try {
         const db = getFirebaseDb();
-        await setDoc(doc(db, 'settings', 'regions'), {
+        reportWriteStatus(await commitFirestoreWrite(setDoc(doc(db, 'settings', 'regions'), {
           regions: updatedRegions,
           groups: updatedGroups,
           updatedAt: Date.now()
-        });
+        })));
       } catch (err) {
         console.error("Error saving new region to Firestore:", err);
       }
@@ -2383,7 +2391,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               chunk.forEach(w => {
                 batch.update(doc(db, 'wines', w.id), { region: newName, updatedAt: now });
               });
-              await batch.commit();
+              reportWriteStatus(await commitFirestoreWrite(batch.commit()));
             }
           } catch (err) {
             console.error("Error propagating region rename to Firestore wines:", err);
@@ -2396,11 +2404,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!isDemo && user) {
       try {
         const db = getFirebaseDb();
-        await setDoc(doc(db, 'settings', 'regions'), {
+        reportWriteStatus(await commitFirestoreWrite(setDoc(doc(db, 'settings', 'regions'), {
           regions: currentList,
           groups: updatedGroups,
           updatedAt: Date.now()
-        });
+        })));
       } catch (err) {
         console.error("Error saving updated region to Firestore:", err);
       }
@@ -2450,7 +2458,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               chunk.forEach(w => {
                 batch.update(doc(db, 'wines', w.id), { region: targetRegion, updatedAt: now });
               });
-              await batch.commit();
+              reportWriteStatus(await commitFirestoreWrite(batch.commit()));
             }
           } catch (err) {
             console.error("Error reassigning wines in Firestore:", err);
@@ -2463,11 +2471,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!isDemo && user) {
       try {
         const db = getFirebaseDb();
-        await setDoc(doc(db, 'settings', 'regions'), {
+        reportWriteStatus(await commitFirestoreWrite(setDoc(doc(db, 'settings', 'regions'), {
           regions: filtered,
           groups: regionGroupsStateRef.current,
           updatedAt: Date.now()
-        });
+        })));
       } catch (err) {
         console.error("Error deleting region in Firestore:", err);
       }
@@ -2488,11 +2496,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!isDemo && user) {
       try {
         const db = getFirebaseDb();
-        await setDoc(doc(db, 'settings', 'regions'), {
+        reportWriteStatus(await commitFirestoreWrite(setDoc(doc(db, 'settings', 'regions'), {
           regions: orderedWithIndex,
           groups: regionGroupsStateRef.current,
           updatedAt: Date.now()
-        });
+        })));
       } catch (err) {
         console.error("Error reordering regions in Firestore:", err);
       }
@@ -2509,11 +2517,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!isDemo && user) {
       try {
         const db = getFirebaseDb();
-        await setDoc(doc(db, 'settings', 'regions'), {
+        reportWriteStatus(await commitFirestoreWrite(setDoc(doc(db, 'settings', 'regions'), {
           regions: DEFAULT_WINE_REGIONS,
           groups: DEFAULT_REGION_GROUPS,
           updatedAt: Date.now()
-        });
+        })));
       } catch (err) {
         console.error("Error resetting regions in Firestore:", err);
       }

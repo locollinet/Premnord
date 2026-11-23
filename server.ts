@@ -91,7 +91,7 @@ function cleanAndParseJson<T = any>(rawText: string): T {
 const DEFAULT_GEMINI_MODELS = [
   "gemini-2.5-flash",
   "gemini-4-hydrogen",
-  "gemini-3.1-flash-lite"
+  "gemini-3.5-flash-lite"
 ];
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -490,19 +490,30 @@ Extrais rigoureusement :
       const modelsToTry = DEFAULT_GEMINI_MODELS;
       let result: any = null;
       let lastError: any = null;
+      const routeDeadline = Date.now() + 50000;
 
       for (const modelName of modelsToTry) {
+        if (routeDeadline - Date.now() < 5000) {
+          console.warn("[API/gemini/parse-purchase-invoice] Global route deadline reached, stopping model cascade.");
+          break;
+        }
         for (let attempt = 0; attempt < 2; attempt++) {
+          const remainingMs = routeDeadline - Date.now();
+          if (remainingMs < 5000) break;
           try {
             console.log(`[API/gemini/parse-purchase-invoice] Attempting parse with ${modelName} (attempt ${attempt + 1})...`);
-            const response = await ai.models.generateContent({
-              model: modelName,
-              contents: contentsPayloadWithPdf,
-              config: {
-                responseMimeType: "application/json",
-                responseSchema: invoiceSchema
-              }
-            });
+            const response = await withTimeout(
+              ai.models.generateContent({
+                model: modelName,
+                contents: contentsPayloadWithPdf,
+                config: {
+                  responseMimeType: "application/json",
+                  responseSchema: invoiceSchema
+                }
+              }),
+              Math.min(20000, remainingMs),
+              modelName
+            );
 
             const responseText = response?.text || "{}";
             result = cleanAndParseJson(responseText);
@@ -514,17 +525,22 @@ Extrais rigoureusement :
             console.warn(`[API/gemini/parse-purchase-invoice] Model ${modelName} attempt ${attempt + 1} failed:`, errMsg);
 
             // If text is available and PDF failed, try text only immediately
-            if (Boolean(cleanBase64 && extractedPdfText) && contentsPayloadTextOnly.length > 0) {
+            const remainingAfter = routeDeadline - Date.now();
+            if (remainingAfter >= 5000 && Boolean(cleanBase64 && extractedPdfText) && contentsPayloadTextOnly.length > 0) {
               try {
                 console.log(`[API/gemini/parse-purchase-invoice] Retrying with text-only payload on ${modelName}...`);
-                const textResp = await ai.models.generateContent({
-                  model: modelName,
-                  contents: contentsPayloadTextOnly,
-                  config: {
-                    responseMimeType: "application/json",
-                    responseSchema: invoiceSchema
-                  }
-                });
+                const textResp = await withTimeout(
+                  ai.models.generateContent({
+                    model: modelName,
+                    contents: contentsPayloadTextOnly,
+                    config: {
+                      responseMimeType: "application/json",
+                      responseSchema: invoiceSchema
+                    }
+                  }),
+                  Math.min(18000, remainingAfter),
+                  `${modelName} (text-only)`
+                );
                 result = cleanAndParseJson(textResp?.text || "{}");
                 console.log(`[API/gemini/parse-purchase-invoice] Text-only payload succeeded on ${modelName}`);
                 break;
@@ -533,8 +549,8 @@ Extrais rigoureusement :
               }
             }
 
-            // If 503 (high demand) or 429, wait 1.2s before retry
-            if (errMsg.includes('503') || errMsg.includes('demand') || errMsg.includes('429')) {
+            // If 503 (high demand) or 429, wait 1.2s before retry (only if time remains)
+            if (routeDeadline - Date.now() > 6000 && (errMsg.includes('503') || errMsg.includes('demand') || errMsg.includes('429'))) {
               await new Promise(r => setTimeout(r, 1200));
             }
           }
@@ -739,18 +755,25 @@ Champs requis dans l'objet JSON :
         ]
       };
 
+      const routeDeadline = Date.now() + 45000;
       for (const modelName of modelsToTry) {
+        const remainingMs = routeDeadline - Date.now();
+        if (remainingMs < 5000) break;
         try {
           console.log(`[API/gemini/generate-technical-sheet] Generating structured sheet for ${effectiveWineName} with ${modelName}...`);
-          const response = await ai.models.generateContent({
-            model: modelName,
-            contents: prompt,
-            config: {
-              systemInstruction: "Tu es un sommelier et œnologue professionnel. Remplis minutieusement chacun des champs de la fiche technique en français d'expert.",
-              responseMimeType: "application/json",
-              responseSchema
-            }
-          });
+          const response = await withTimeout(
+            ai.models.generateContent({
+              model: modelName,
+              contents: prompt,
+              config: {
+                systemInstruction: "Tu es un sommelier et œnologue professionnel. Remplis minutieusement chacun des champs de la fiche technique en français d'expert.",
+                responseMimeType: "application/json",
+                responseSchema
+              }
+            }),
+            Math.min(20000, remainingMs),
+            modelName
+          );
 
           responseText = response?.text || "";
           if (responseText) {
@@ -853,13 +876,20 @@ Reste concis (environ 3-4 phrases courtes). Ne mets pas de titres, écris direct
       let responseText = "";
       let lastError = null;
 
+      const routeDeadline = Date.now() + 40000;
       for (const modelName of modelsToTry) {
+        const remainingMs = routeDeadline - Date.now();
+        if (remainingMs < 5000) break;
         try {
           console.log(`[API/gemini/generate-sheet] Calling ai.models.generateContent with model ${modelName}...`);
-          const response = await ai.models.generateContent({
-            model: modelName,
-            contents: prompt,
-          });
+          const response = await withTimeout(
+            ai.models.generateContent({
+              model: modelName,
+              contents: prompt,
+            }),
+            Math.min(18000, remainingMs),
+            modelName
+          );
           responseText = response?.text || "";
           if (responseText) {
             console.log(`[API/gemini/generate-sheet] Success with model: ${modelName}`);
@@ -978,16 +1008,23 @@ Extrais rigoureusement les informations dans l'objet JSON structuré suivant :
         }
       };
 
+      const routeDeadline = Date.now() + 45000;
       for (const modelName of modelsToTry) {
+        const remainingMs = routeDeadline - Date.now();
+        if (remainingMs < 5000) break;
         try {
-          const response = await ai.models.generateContent({
-            model: modelName,
-            contents: prompt,
-            config: {
-              responseMimeType: "application/json",
-              responseSchema
-            }
-          });
+          const response = await withTimeout(
+            ai.models.generateContent({
+              model: modelName,
+              contents: prompt,
+              config: {
+                responseMimeType: "application/json",
+                responseSchema
+              }
+            }),
+            Math.min(20000, remainingMs),
+            modelName
+          );
           responseText = response?.text || "";
           if (responseText) {
             lastError = null;

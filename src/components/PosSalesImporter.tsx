@@ -3,6 +3,7 @@ import { useFirebase, StockOperation } from '../context/FirebaseContext';
 import { Wine, WineColor, Site, getCanonicalDomain, normalizeWineString, isSameWineReference } from '../types';
 import { findBestWineMatchInCatalog } from '../lib/wineMatching';
 import { matchesWineSearch, removeAccents, normalizeSearchTokens, getWineSearchRelevanceScore } from '../lib/stringUtils';
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import * as XLSX from 'xlsx';
 import { 
   Receipt, 
@@ -150,23 +151,16 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
   };
 
   const fetchReceiptApi = async (payload: Record<string, any>): Promise<Response> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 65000);
-    try {
-      return await fetch('/api/gemini/parse-sales-receipt', {
+    return fetchWithTimeout(
+      '/api/gemini/parse-sales-receipt',
+      {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-    } catch (err: any) {
-      if (err?.name === 'AbortError') {
-        throw new Error("L'analyse IA a pris trop de temps (délai dépassé). Veuillez réessayer ou utiliser un fichier plus léger.");
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+        body: JSON.stringify(payload)
+      },
+      65000,
+      "L'analyse IA a pris trop de temps (délai dépassé). Veuillez réessayer ou utiliser un fichier plus léger."
+    );
   };
 
   const handleAnalyze = async () => {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Wine, Movement, isSameWineReference, TechnicalSheet, isSite6 } from '../types';
 import { REASON_LABELS, REASON_BADGE_STYLES } from '../lib/accountingCalculations';
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import { MultiSiteDispatchModal } from './MultiSiteDispatchModal';
 import { 
   X, 
@@ -407,7 +408,7 @@ export const WineDetailModal: React.FC<WineDetailModalProps> = ({ wineId, onClos
     setGenerationSuccess(null);
     try {
       const effectiveName = wine.appellation || wine.name || '';
-      const response = await fetch('/api/gemini/generate-technical-sheet', {
+      const response = await fetchWithTimeout('/api/gemini/generate-technical-sheet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -420,7 +421,7 @@ export const WineDetailModal: React.FC<WineDetailModalProps> = ({ wineId, onClos
           color: wine.color,
           region: wine.region || ''
         })
-      });
+      }, 50000);
 
       if (!response.ok) {
         let errorMsg = `Erreur serveur (${response.status})`;

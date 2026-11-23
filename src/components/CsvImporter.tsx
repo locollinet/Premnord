@@ -1269,123 +1269,126 @@ export const CsvImporter: React.FC<CsvImporterProps> = ({ onImportComplete }) =>
     let updatedReplaced = 0;
     let skippedIso = 0;
 
-    for (let i = 0; i < validRows.length; i++) {
-      const row = validRows[i];
-      const targetSiteId = row.siteId || selectedSiteId || 'site-3';
-      
-      if (row.importStatus === 'iso') {
-        skippedIso++;
-        count++;
-        setImportProgress({ current: count, total: validRows.length });
-        continue;
-      }
+    try {
+      for (let i = 0; i < validRows.length; i++) {
+        const row = validRows[i];
+        const targetSiteId = row.siteId || selectedSiteId || 'site-3';
+        
+        if (row.importStatus === 'iso') {
+          skippedIso++;
+          count++;
+          setImportProgress({ current: count, total: validRows.length });
+          continue;
+        }
 
-      try {
-        const existingWine = findMatchingWine(row, wines, targetSiteId, isRefOnly);
+        try {
+          const existingWine = findMatchingWine(row, wines, targetSiteId, isRefOnly);
 
-        if (isRefOnly) {
-          // MODE 1: REFERENCE ONLY (STOCK STAYS STRICTLY 0)
-          if (existingWine) {
-            await updateWine(existingWine.id, {
-              priceBuy: row.priceBuy !== undefined ? row.priceBuy : existingWine.priceBuy,
-              priceBuyHt: row.priceBuyHt !== undefined ? row.priceBuyHt : existingWine.priceBuyHt,
-              shippingCost: row.shippingCost !== undefined ? row.shippingCost : existingWine.shippingCost,
-              priceSell: row.priceSell !== undefined ? row.priceSell : existingWine.priceSell,
-              color: row.color,
-              region: row.region || existingWine.region,
-              appellation: row.appellation || existingWine.appellation,
-              cuvee: row.cuvee || existingWine.cuvee
-            }, 'edit');
-            updatedReplaced++;
+          if (isRefOnly) {
+            // MODE 1: REFERENCE ONLY (STOCK STAYS STRICTLY 0)
+            if (existingWine) {
+              await updateWine(existingWine.id, {
+                priceBuy: row.priceBuy !== undefined ? row.priceBuy : existingWine.priceBuy,
+                priceBuyHt: row.priceBuyHt !== undefined ? row.priceBuyHt : existingWine.priceBuyHt,
+                shippingCost: row.shippingCost !== undefined ? row.shippingCost : existingWine.shippingCost,
+                priceSell: row.priceSell !== undefined ? row.priceSell : existingWine.priceSell,
+                color: row.color,
+                region: row.region || existingWine.region,
+                appellation: row.appellation || existingWine.appellation,
+                cuvee: row.cuvee || existingWine.cuvee
+              }, 'edit');
+              updatedReplaced++;
+            } else {
+              await addWine({
+                name: row.name,
+                domain: row.domain,
+                vintage: row.vintage,
+                color: row.color,
+                region: row.region,
+                quantity: 0,
+                alertThreshold: 2,
+                siteId: targetSiteId,
+                priceBuy: row.priceBuy,
+                priceBuyHt: row.priceBuyHt,
+                shippingCost: row.shippingCost,
+                priceSell: row.priceSell,
+                bin: '',
+                notes: row.notes,
+                appellation: row.appellation,
+                cuvee: row.cuvee
+              });
+              newCreated++;
+            }
           } else {
-            await addWine({
+            // MODE 2: FULL STOCK IMPORT
+            const wineId = await addWine({
               name: row.name,
               domain: row.domain,
               vintage: row.vintage,
               color: row.color,
               region: row.region,
-              quantity: 0,
-              alertThreshold: 2,
+              quantity: row.quantity,
+              alertThreshold: row.alertThreshold,
               siteId: targetSiteId,
               priceBuy: row.priceBuy,
               priceBuyHt: row.priceBuyHt,
               shippingCost: row.shippingCost,
               priceSell: row.priceSell,
-              bin: '',
-              notes: row.notes,
+              bin: row.bin,
+              notes: row.notes || (row.siteName ? `Importation de stock - ${row.siteName}` : undefined),
               appellation: row.appellation,
               cuvee: row.cuvee
-            });
-            newCreated++;
-          }
-        } else {
-          // MODE 2: FULL STOCK IMPORT
-          const wineId = await addWine({
-            name: row.name,
-            domain: row.domain,
-            vintage: row.vintage,
-            color: row.color,
-            region: row.region,
-            quantity: row.quantity,
-            alertThreshold: row.alertThreshold,
-            siteId: targetSiteId,
-            priceBuy: row.priceBuy,
-            priceBuyHt: row.priceBuyHt,
-            shippingCost: row.shippingCost,
-            priceSell: row.priceSell,
-            bin: row.bin,
-            notes: row.notes || (row.siteName ? `Importation de stock - ${row.siteName}` : undefined),
-            appellation: row.appellation,
-            cuvee: row.cuvee
-          }, { importMode: 'replace' });
+            }, { importMode: 'replace' });
 
-          if (row.importStatus === 'new') {
-            newCreated++;
-            if (row.quantity > 0) {
-              await addMovement({
-                wineId,
-                wineName: `${row.name} (${row.vintage})`,
-                type: 'in',
-                quantity: row.quantity,
-                reason: 'livraison',
-                notes: `Mise en stock initiale par import Excel/CSV (${row.siteName || 'Site sélectionné'}).`,
-                toSiteId: targetSiteId
-              });
-            }
-          } else if (row.importStatus === 'different') {
-            updatedReplaced++;
-            if (existingWine) {
-              const qtyDiff = row.quantity - existingWine.quantity;
-              if (qtyDiff !== 0) {
+            if (row.importStatus === 'new') {
+              newCreated++;
+              if (row.quantity > 0) {
                 await addMovement({
                   wineId,
                   wineName: `${row.name} (${row.vintage})`,
-                  type: qtyDiff > 0 ? 'in' : 'out',
-                  quantity: Math.abs(qtyDiff),
-                  reason: 'correction',
-                  notes: `Réajustement automatique de stock par réimport Excel/CSV (Ancien: ${existingWine.quantity}, Nouveau: ${row.quantity}).`,
-                  fromSiteId: qtyDiff < 0 ? targetSiteId : undefined,
-                  toSiteId: qtyDiff > 0 ? targetSiteId : undefined
+                  type: 'in',
+                  quantity: row.quantity,
+                  reason: 'livraison',
+                  notes: `Mise en stock initiale par import Excel/CSV (${row.siteName || 'Site sélectionné'}).`,
+                  toSiteId: targetSiteId
                 });
+              }
+            } else if (row.importStatus === 'different') {
+              updatedReplaced++;
+              if (existingWine) {
+                const qtyDiff = row.quantity - existingWine.quantity;
+                if (qtyDiff !== 0) {
+                  await addMovement({
+                    wineId,
+                    wineName: `${row.name} (${row.vintage})`,
+                    type: qtyDiff > 0 ? 'in' : 'out',
+                    quantity: Math.abs(qtyDiff),
+                    reason: 'correction',
+                    notes: `Réajustement automatique de stock par réimport Excel/CSV (Ancien: ${existingWine.quantity}, Nouveau: ${row.quantity}).`,
+                    fromSiteId: qtyDiff < 0 ? targetSiteId : undefined,
+                    toSiteId: qtyDiff > 0 ? targetSiteId : undefined
+                  });
+                }
               }
             }
           }
+
+          count++;
+          setImportProgress({ current: count, total: validRows.length });
+        } catch (err) {
+          console.error("Failed to import row:", row, err);
         }
-
-        count++;
-        setImportProgress({ current: count, total: validRows.length });
-      } catch (err) {
-        console.error("Failed to import row:", row, err);
       }
-    }
 
-    setIsImporting(false);
-    setSuccessCount(count);
-    setImportResults({
-      newCreated,
-      updatedReplaced,
-      skippedIso
-    });
+      setSuccessCount(count);
+      setImportResults({
+        newCreated,
+        updatedReplaced,
+        skippedIso
+      });
+    } finally {
+      setIsImporting(false);
+    }
     setParsedRows([]);
     setQueueRows([]);
     setInputText('');

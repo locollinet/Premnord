@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useFirebase } from '../context/FirebaseContext';
 import { Wine, WineColor, TechnicalSheet, isSameWineReference, isSite6 } from '../types';
 import { calculateSellingPrice, getPricingCoefficient } from '../lib/pricing';
+import { fetchWithTimeout } from '../lib/fetchWithTimeout';
 import { X, Save, ShieldAlert, Sparkles, Calculator, HelpCircle, ChevronDown, ChevronUp, Search, CheckCircle, Database, RefreshCw, AlertTriangle, Check, Layers, Trash2 } from 'lucide-react';
 
 interface WineFormModalProps {
@@ -446,7 +447,7 @@ export const WineFormModal: React.FC<WineFormModalProps> = ({ wineToEdit, isDupl
     setTechSheetAiError(null);
     setTechSheetAiSuccess(null);
     try {
-      const response = await fetch('/api/gemini/generate-technical-sheet', {
+      const response = await fetchWithTimeout('/api/gemini/generate-technical-sheet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -459,7 +460,7 @@ export const WineFormModal: React.FC<WineFormModalProps> = ({ wineToEdit, isDupl
           color: color,
           region: region.trim()
         })
-      });
+      }, 50000);
 
       if (!response.ok) {
         let errorMsg = `Erreur serveur (${response.status})`;
@@ -512,7 +513,7 @@ export const WineFormModal: React.FC<WineFormModalProps> = ({ wineToEdit, isDupl
     setIsGeneratingNotes(true);
     setAiError(null);
     try {
-      const response = await fetch('/api/gemini/generate-sheet', {
+      const response = await fetchWithTimeout('/api/gemini/generate-sheet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -524,7 +525,7 @@ export const WineFormModal: React.FC<WineFormModalProps> = ({ wineToEdit, isDupl
           color: color,
           region: region.trim()
         })
-      });
+      }, 45000);
 
       let errorMsg = `Erreur serveur (${response.status}) lors de l'appel à l'API de génération.`;
       if (!response.ok) {
@@ -822,8 +823,8 @@ export const WineFormModal: React.FC<WineFormModalProps> = ({ wineToEdit, isDupl
             quantity: Math.abs(qtyDiff),
             reason: 'correction',
             notes: `Correction manuelle de stock lors de la mise à jour de la fiche produit.`,
-            fromSiteId: qtyDiff < 0 ? targetWineToUpdate.siteId : '',
-            toSiteId: qtyDiff > 0 ? wineData.siteId : ''
+            fromSiteId: qtyDiff < 0 ? targetWineToUpdate.siteId : undefined,
+            toSiteId: qtyDiff > 0 ? wineData.siteId : undefined
           });
         }
       } else {
