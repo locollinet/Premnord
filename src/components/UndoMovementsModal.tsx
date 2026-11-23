@@ -74,8 +74,6 @@ export const UndoMovementsModal: React.FC<UndoMovementsModalProps> = ({
     }
   }, [isOpen, activeTab, recentMovements.length, undoneMovements.length]);
 
-  if (!isOpen) return null;
-
   const selectLastX = (count: number) => {
     setPresetCount(count);
     const list = activeTab === 'undo' ? recentMovements : undoneMovements;
@@ -119,8 +117,9 @@ export const UndoMovementsModal: React.FC<UndoMovementsModalProps> = ({
   const activeList = activeTab === 'undo' ? recentMovements : undoneMovements;
   const selectedMovements = activeList.filter(m => selectedIds.includes(m.id));
 
-  // Compute cumulative stock preview per wine/site
+  // Compute cumulative stock preview per wine/site (must stay BEFORE any early return to satisfy React Rules of Hooks)
   const stockImpactPreview = useMemo(() => {
+    if (!isOpen) return [];
     const map = new Map<
       string,
       {
@@ -182,7 +181,9 @@ export const UndoMovementsModal: React.FC<UndoMovementsModalProps> = ({
     });
 
     return Array.from(map.values());
-  }, [selectedMovements, wines, sites, activeTab]);
+  }, [isOpen, selectedMovements, wines, sites, activeTab]);
+
+  if (!isOpen) return null;
 
   const handleConfirm = async () => {
     if (selectedIds.length === 0) return;

@@ -51,14 +51,21 @@ export function getFirebaseDb(): Firestore {
     const dbId = (firebaseConfig as any).firestoreDatabaseId;
     try {
       db = initializeFirestore(firebaseApp, {
+        experimentalAutoDetectLongPolling: true,
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager()
         })
       }, dbId);
-      console.log("Firestore initialized with persistent local cache (offline enabled).");
+      console.log("Firestore initialized with persistent local cache (offline enabled) & auto-detect long polling.");
     } catch (e) {
       console.warn("Could not initialize Firestore with persistent local cache, falling back to memory:", e);
-      db = getFirestore(firebaseApp, dbId);
+      try {
+        db = initializeFirestore(firebaseApp, {
+          experimentalAutoDetectLongPolling: true
+        }, dbId);
+      } catch (_) {
+        db = getFirestore(firebaseApp, dbId);
+      }
     }
   }
   return db;

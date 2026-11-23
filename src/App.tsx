@@ -312,7 +312,7 @@ function AppContent() {
               }}
               className="h-10 px-4 rounded-xl flex items-center gap-2 font-bold text-xs text-premnord-gold bg-premnord-gold-light hover:bg-premnord-gold/20 transition-all cursor-pointer border border-premnord-gold/30 whitespace-nowrap uppercase font-mono"
             >
-              <RefreshCw className="w-3.5 h-3.5 shrink-0 animate-spin text-premnord-gold" />
+              <RefreshCw className="w-3.5 h-3.5 shrink-0 text-premnord-gold" />
               Entrée / Sortie / Transfert
             </button>
 

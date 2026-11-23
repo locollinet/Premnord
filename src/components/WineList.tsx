@@ -29,7 +29,7 @@ const COLOR_BADGES: Record<WineColor, { label: string; badge: string }> = {
 };
 
 export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onNavigateToAccounting, onRecordMovement }) => {
-  const { wines, sites, updateWine, addMovement, undoneMovements } = useFirebase();
+  const { wines, sites, updateWine, recordStockOperations, undoneMovements } = useFirebase();
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -82,6 +82,7 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
 
   // Quick transition states for animation feedback
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
+  const [exitError, setExitError] = useState<string | null>(null);
   const [dispatchWine, setDispatchWine] = useState<Wine | null>(null);
   const [isZeroStockModalOpen, setIsZeroStockModalOpen] = useState(false);
   const [isUndoModalOpen, setIsUndoModalOpen] = useState(false);
@@ -97,57 +98,68 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
     reason: 'vente' | 'offert' | 'casse' | 'bouchon' | 'correction'
   ) => {
     e.stopPropagation();
-    if (wine.quantity <= 0) return;
+    if (wine.quantity <= 0 || adjustingId !== null) return;
 
+    setExitError(null);
     setAdjustingId(`${wine.id}_${reason}`);
-    const newQuantity = wine.quantity - 1;
+    const newQuantity = Math.max(0, wine.quantity - 1);
 
     try {
-      await updateWine(wine.id, { quantity: newQuantity }, 'stock');
-      await addMovement({
-        wineId: wine.id,
-        wineName: `${wine.name} (${wine.vintage})`,
-        type: 'out',
-        quantity: 1,
-        reason,
-        notes: `Sortie directe 1 bt (${reason}) depuis le catalogue de cave`,
-        fromSiteId: wine.siteId
-      });
+      await recordStockOperations([
+        {
+          wineId: wine.id,
+          wineUpdates: { quantity: newQuantity },
+          movement: {
+            wineId: wine.id,
+            wineName: `${wine.name} (${wine.vintage})`,
+            type: 'out',
+            quantity: 1,
+            reason,
+            notes: `Sortie directe 1 bt (${reason}) depuis le catalogue de cave`,
+            fromSiteId: wine.siteId
+          }
+        }
+      ]);
       setQuickExitSiteWineId(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error during direct exit:', err);
+      setExitError(err?.message || "Erreur lors de la sortie de stock. Veuillez réessayer.");
     } finally {
-      setTimeout(() => setAdjustingId(null), 300);
+      setAdjustingId(null);
     }
   };
 
   // Quick stock change handler (+1 / -1 bottle)
   const handleQuickStockChange = async (e: React.MouseEvent, wine: Wine, change: number) => {
     e.stopPropagation(); // Prevent opening details modal
-    if (wine.quantity + change < 0) return;
+    if (wine.quantity + change < 0 || adjustingId !== null) return;
     
+    setExitError(null);
     setAdjustingId(`${wine.id}_${change > 0 ? 'inc' : 'dec'}`);
     const newQuantity = wine.quantity + change;
     
     try {
-      // 1. Update the wine quantity
-      await updateWine(wine.id, { quantity: newQuantity }, 'stock');
-      
-      // 2. Add stock audit movement
-      await addMovement({
-        wineId: wine.id,
-        wineName: `${wine.name} (${wine.vintage})`,
-        type: change > 0 ? 'in' : 'out',
-        quantity: Math.abs(change),
-        reason: change > 0 ? 'livraison' : 'vente',
-        notes: `Ajustement rapide de stock (+/- 1) depuis le catalogue de cave.`,
-        fromSiteId: change < 0 ? wine.siteId : undefined,
-        toSiteId: change > 0 ? wine.siteId : undefined
-      });
-    } catch (e) {
-      console.error("Error during quick stock change:", e);
+      await recordStockOperations([
+        {
+          wineId: wine.id,
+          wineUpdates: { quantity: newQuantity },
+          movement: {
+            wineId: wine.id,
+            wineName: `${wine.name} (${wine.vintage})`,
+            type: change > 0 ? 'in' : 'out',
+            quantity: Math.abs(change),
+            reason: change > 0 ? 'livraison' : 'vente',
+            notes: `Ajustement rapide de stock (+/- 1) depuis le catalogue de cave.`,
+            fromSiteId: change < 0 ? wine.siteId : undefined,
+            toSiteId: change > 0 ? wine.siteId : undefined
+          }
+        }
+      ]);
+    } catch (err: any) {
+      console.error("Error during quick stock change:", err);
+      setExitError(err?.message || "Erreur lors de la mise à jour du stock.");
     } finally {
-      setTimeout(() => setAdjustingId(null), 300);
+      setAdjustingId(null);
     }
   };
 
@@ -1215,6 +1227,23 @@ export const WineList: React.FC<WineListProps> = ({ onSelectWine, onAddWine, onN
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Ouvrir l'outil de gestion &amp; suppression</span>
+          </button>
+        </div>
+      )}
+
+      {/* Error Banner for Direct Stock Exits */}
+      {exitError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-rose-800 text-xs font-semibold shadow-xs animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4.5 h-4.5 text-rose-600 shrink-0" />
+            <span>{exitError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExitError(null)}
+            className="p-1 text-rose-500 hover:text-rose-800 rounded-lg cursor-pointer"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}

@@ -96,6 +96,24 @@ const DEFAULT_GEMINI_MODELS = [
   "gemini-2.0-flash"
 ];
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Timeout (${ms}ms) sur ${label}`));
+    }, ms);
+    promise.then(
+      (val) => {
+        clearTimeout(timer);
+        resolve(val);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -239,35 +257,52 @@ Fournis une réponse au format JSON strict.`;
       const modelsToTry = DEFAULT_GEMINI_MODELS;
       let result: any = null;
       let lastError: any = null;
+      const routeDeadline = Date.now() + 50000;
 
       for (const modelName of modelsToTry) {
+        const remainingMs = routeDeadline - Date.now();
+        if (remainingMs < 5000) {
+          console.warn("[API/gemini/parse-sales-receipt] Global route deadline reached, stopping model cascade.");
+          break;
+        }
+        const attemptTimeoutMs = Math.min(20000, remainingMs);
+
         try {
           console.log(`[API/gemini/parse-sales-receipt] Attempting parse with ${modelName}...`);
-          const response = await ai.models.generateContent({
-            model: modelName,
-            contents: contentsPayloadWithPdf,
-            config: {
-              responseMimeType: "application/json",
-              responseSchema: salesReceiptSchema
-            }
-          });
+          const response = await withTimeout(
+            ai.models.generateContent({
+              model: modelName,
+              contents: contentsPayloadWithPdf,
+              config: {
+                responseMimeType: "application/json",
+                responseSchema: salesReceiptSchema
+              }
+            }),
+            attemptTimeoutMs,
+            modelName
+          );
           result = cleanAndParseJson(response?.text || "{}");
           console.log(`[API/gemini/parse-sales-receipt] Success with ${modelName}`);
           break;
         } catch (modelErr: any) {
           lastError = modelErr;
           console.warn(`[API/gemini/parse-sales-receipt] Model ${modelName} failed:`, modelErr.message || modelErr);
-          if (contentsPayloadTextOnly.length > 0 && contentsPayloadWithPdf !== contentsPayloadTextOnly) {
+          const remainingAfter = routeDeadline - Date.now();
+          if (remainingAfter >= 5000 && contentsPayloadTextOnly.length > 0 && contentsPayloadWithPdf !== contentsPayloadTextOnly) {
             try {
               console.log(`[API/gemini/parse-sales-receipt] Retrying with text-only payload on ${modelName}...`);
-              const textResp = await ai.models.generateContent({
-                model: modelName,
-                contents: contentsPayloadTextOnly,
-                config: {
-                  responseMimeType: "application/json",
-                  responseSchema: salesReceiptSchema
-                }
-              });
+              const textResp = await withTimeout(
+                ai.models.generateContent({
+                  model: modelName,
+                  contents: contentsPayloadTextOnly,
+                  config: {
+                    responseMimeType: "application/json",
+                    responseSchema: salesReceiptSchema
+                  }
+                }),
+                Math.min(18000, remainingAfter),
+                `${modelName} (text-only)`
+              );
               result = cleanAndParseJson(textResp?.text || "{}");
               console.log(`[API/gemini/parse-sales-receipt] Text-only payload succeeded on ${modelName}`);
               break;

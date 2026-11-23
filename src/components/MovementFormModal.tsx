@@ -12,7 +12,7 @@ interface MovementFormModalProps {
 }
 
 export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselectedWine, onClose, onAlertTriggered }) => {
-  const { wines, sites, addMovement, updateWine, addWine } = useFirebase();
+  const { wines, sites, addWine, recordStockOperations } = useFirebase();
 
   // Form states
   const [selectedWineId, setSelectedWineId] = useState('');
@@ -42,17 +42,19 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
       });
   }, [wines, wineFilterTerm]);
 
-  const wine = preselectedWine || wines.find(w => w.id === selectedWineId);
+  const wine = preselectedWine
+    ? (wines.find(w => w.id === preselectedWine.id) || preselectedWine)
+    : wines.find(w => w.id === selectedWineId);
 
   useEffect(() => {
     if (preselectedWine) {
       setSelectedWineId(preselectedWine.id);
       setFromSiteId(preselectedWine.siteId);
-    } else if (wines.length > 0) {
+    } else if (!selectedWineId && wines.length > 0) {
       setSelectedWineId(wines[0].id);
       setFromSiteId(wines[0].siteId);
     }
-  }, [preselectedWine, wines]);
+  }, [preselectedWine, wines, selectedWineId]);
 
   // Adjust defaults based on movement type
   useEffect(() => {
@@ -113,37 +115,39 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
     try {
       if (type === 'in') {
         const finalQty = wine.quantity + quantity;
-        
-        // Log movement
-        await addMovement({
-          wineId: wine.id,
-          wineName: `${wine.name} (${wine.vintage})`,
-          type: 'in',
-          quantity,
-          reason,
-          notes: notes.trim() || undefined,
-          toSiteId: wine.siteId
-        });
-
-        // Update stock
-        await updateWine(wine.id, { quantity: finalQty }, 'stock');
+        await recordStockOperations([
+          {
+            wineId: wine.id,
+            wineUpdates: { quantity: finalQty },
+            movement: {
+              wineId: wine.id,
+              wineName: `${wine.name} (${wine.vintage})`,
+              type: 'in',
+              quantity,
+              reason,
+              notes: notes.trim() || undefined,
+              toSiteId: wine.siteId
+            }
+          }
+        ]);
 
       } else if (type === 'out') {
         const finalQty = Math.max(0, wine.quantity - quantity);
-        
-        // Log movement
-        await addMovement({
-          wineId: wine.id,
-          wineName: `${wine.name} (${wine.vintage})`,
-          type: 'out',
-          quantity,
-          reason,
-          notes: notes.trim() || undefined,
-          fromSiteId: wine.siteId
-        });
-
-        // Update stock
-        await updateWine(wine.id, { quantity: finalQty }, 'stock');
+        await recordStockOperations([
+          {
+            wineId: wine.id,
+            wineUpdates: { quantity: finalQty },
+            movement: {
+              wineId: wine.id,
+              wineName: `${wine.name} (${wine.vintage})`,
+              type: 'out',
+              quantity,
+              reason,
+              notes: notes.trim() || undefined,
+              fromSiteId: wine.siteId
+            }
+          }
+        ]);
 
         // Check if alert needs to trigger (exactly 1 or exactly 0)
         if (onAlertTriggered && (finalQty === 1 || finalQty === 0)) {
@@ -152,31 +156,39 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
 
       } else if (type === 'transfer') {
         // SMART TRANSFER SYSTEM
-        // 1. Subtract quantity from source wine
-        const sourceFinalQty = wine.quantity - quantity;
-        await updateWine(wine.id, { quantity: sourceFinalQty }, 'stock');
-
-        // Check if source wine alert is triggered
-        if (onAlertTriggered && (sourceFinalQty === 1 || sourceFinalQty === 0)) {
-          onAlertTriggered(`${wine.name} (${wine.vintage}) [Origine]`, sourceFinalQty);
-        }
-
-        // 2. Find or create matching wine at target site B
+        const sourceFinalQty = Math.max(0, wine.quantity - quantity);
         const targetMatch = wines.find(w => 
           w.siteId === toSiteId && isSameWineReference(w, wine)
         );
 
-        let targetWineId = '';
+        const transferMovement = {
+          wineId: wine.id,
+          wineName: `${wine.name} (${wine.vintage})`,
+          type: 'transfer' as const,
+          quantity,
+          reason: 'transfert' as const,
+          notes: notes.trim() ? notes.trim() : `Transfert interne de ${quantity} bouteilles.`,
+          fromSiteId,
+          toSiteId
+        };
 
         if (targetMatch) {
-          // Add to existing wine stock and update bin if provided
-          targetWineId = targetMatch.id;
           const updates: Partial<Wine> = { quantity: targetMatch.quantity + quantity };
           if (targetBin.trim()) updates.bin = targetBin.trim();
-          await updateWine(targetMatch.id, updates, 'stock');
+          await recordStockOperations([
+            {
+              wineId: wine.id,
+              wineUpdates: { quantity: sourceFinalQty },
+              movement: transferMovement
+            },
+            {
+              wineId: targetMatch.id,
+              wineUpdates: updates
+            }
+          ]);
         } else {
           // Clone wine sheet on target site with transferred quantity, keeping all sommelier & accounting data
-          targetWineId = await addWine({
+          await addWine({
             name: wine.name,
             domain: wine.domain,
             vintage: wine.vintage,
@@ -198,33 +210,38 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
             technicalSheet: wine.technicalSheet,
             notes: wine.notes ? `${wine.notes}\n(Transféré depuis ${sites.find(s => s.id === fromSiteId)?.name || 'autre site'})` : undefined
           });
+
+          await recordStockOperations([
+            {
+              wineId: wine.id,
+              wineUpdates: { quantity: sourceFinalQty },
+              movement: transferMovement
+            }
+          ]);
         }
 
-        // 3. Log movement
-        await addMovement({
-          wineId: wine.id,
-          wineName: `${wine.name} (${wine.vintage})`,
-          type: 'transfer',
-          quantity,
-          reason: 'transfert',
-          notes: notes.trim() ? notes.trim() : `Transfert interne de ${quantity} bouteilles.`,
-          fromSiteId,
-          toSiteId
-        });
+        // Check if source wine alert is triggered
+        if (onAlertTriggered && (sourceFinalQty === 1 || sourceFinalQty === 0)) {
+          onAlertTriggered(`${wine.name} (${wine.vintage}) [Origine]`, sourceFinalQty);
+        }
 
       } else if (type === 'correction') {
         const finalQty = wine.quantity + quantity;
-        await updateWine(wine.id, { quantity: finalQty }, 'stock');
-
-        await addMovement({
-          wineId: wine.id,
-          wineName: `${wine.name} (${wine.vintage})`,
-          type: 'correction',
-          quantity,
-          reason,
-          notes: notes.trim() || undefined,
-          toSiteId: wine.siteId
-        });
+        await recordStockOperations([
+          {
+            wineId: wine.id,
+            wineUpdates: { quantity: finalQty },
+            movement: {
+              wineId: wine.id,
+              wineName: `${wine.name} (${wine.vintage})`,
+              type: 'correction',
+              quantity,
+              reason,
+              notes: notes.trim() || undefined,
+              toSiteId: wine.siteId
+            }
+          }
+        ]);
       }
 
       onClose();

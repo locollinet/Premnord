@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useFirebase } from '../context/FirebaseContext';
+import { useFirebase, StockOperation } from '../context/FirebaseContext';
 import { Wine, isSameWineReference } from '../types';
 import { X, CheckCircle, Plus, RefreshCw, MapPin, ArrowRightLeft, AlertTriangle, Layers, Minus } from 'lucide-react';
 
@@ -10,7 +10,7 @@ interface MultiSiteDispatchModalProps {
 }
 
 export const MultiSiteDispatchModal: React.FC<MultiSiteDispatchModalProps> = ({ referenceWine, onClose, onCompleted }) => {
-  const { wines, sites, addWine, updateWine, addSite, addMovement } = useFirebase();
+  const { wines, sites, addWine, addSite, recordStockOperations } = useFirebase();
 
   // Find all existing wine cards matching this reference
   const matchingWines = React.useMemo(() => {
@@ -130,11 +130,14 @@ export const MultiSiteDispatchModal: React.FC<MultiSiteDispatchModalProps> = ({ 
   };
 
   const handleSaveDispatch = async () => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     setErrorMsg(null);
 
     try {
-      // Loop over each site and update or create wine records
+      const ops: StockOperation[] = [];
+
+      // Collect all updates for existing site cards and create new site cards where needed
       for (const site of sites) {
         const targetQty = siteQuantities[site.id] || 0;
         const targetBin = (siteBins[site.id] || '').trim();
@@ -146,10 +149,11 @@ export const MultiSiteDispatchModal: React.FC<MultiSiteDispatchModalProps> = ({ 
           if (targetBin !== (existingWine.bin || '')) updates.bin = targetBin;
 
           if (Object.keys(updates).length > 0) {
-            await updateWine(existingWine.id, updates, 'stock');
-            if (updates.quantity !== undefined) {
-              const diff = targetQty - existingWine.quantity;
-              await addMovement({
+            const diff = targetQty - existingWine.quantity;
+            ops.push({
+              wineId: existingWine.id,
+              wineUpdates: updates,
+              movement: updates.quantity !== undefined ? {
                 wineId: existingWine.id,
                 wineName: `${existingWine.name} (${existingWine.vintage})`,
                 type: 'transfer',
@@ -157,8 +161,8 @@ export const MultiSiteDispatchModal: React.FC<MultiSiteDispatchModalProps> = ({ 
                 reason: 'transfert',
                 notes: `Ventilation de stock multi-sites (${diff > 0 ? '+' : ''}${diff} bt sur ${site.name.split(' - ')[0]}).`,
                 toSiteId: site.id
-              });
-            }
+              } : undefined
+            });
           }
         } else if (targetQty > 0) {
           // Clone wine card on target site with new target quantity and bin/casier, keeping all metadata
@@ -185,23 +189,30 @@ export const MultiSiteDispatchModal: React.FC<MultiSiteDispatchModalProps> = ({ 
             notes: referenceWine.notes ? `${referenceWine.notes}\n(Ventilation initiale le ${new Date().toLocaleDateString('fr-FR')})` : undefined
           });
 
-          await addMovement({
+          ops.push({
             wineId: newWineId,
-            wineName: `${referenceWine.name} (${referenceWine.vintage})`,
-            type: 'transfer',
-            quantity: targetQty,
-            reason: 'transfert',
-            notes: `Affectation initiale de ${targetQty} bt sur ${site.name.split(' - ')[0]} (Casier: ${targetBin || 'N/C'}) via ventilation multi-sites.`,
-            toSiteId: site.id
+            movement: {
+              wineId: newWineId,
+              wineName: `${referenceWine.name} (${referenceWine.vintage})`,
+              type: 'transfer',
+              quantity: targetQty,
+              reason: 'transfert',
+              notes: `Affectation initiale de ${targetQty} bt sur ${site.name.split(' - ')[0]} (Casier: ${targetBin || 'N/C'}) via ventilation multi-sites.`,
+              toSiteId: site.id
+            }
           });
         }
+      }
+
+      if (ops.length > 0) {
+        await recordStockOperations(ops);
       }
 
       setSuccessMsg("Ventilation des stocks enregistrée avec succès !");
       setTimeout(() => {
         if (onCompleted) onCompleted();
         onClose();
-      }, 1200);
+      }, 900);
     } catch (err) {
       console.error("Erreur lors du dispatching", err);
       setErrorMsg("Erreur lors de la sauvegarde de la ventilation.");

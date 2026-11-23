@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useFirebase } from '../context/FirebaseContext';
+import { useFirebase, StockOperation } from '../context/FirebaseContext';
 import { Wine, WineColor, isSameWineReference, getWineReferenceKey, isSite6 } from '../types';
 import { matchesWineSearch, getWineSearchRelevanceScore } from '../lib/stringUtils';
 import { MultiSiteDispatchModal } from './MultiSiteDispatchModal';
@@ -36,7 +36,7 @@ const COLOR_THEMES: Record<WineColor, { badge: string }> = {
 const frCollator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
 
 export const MobileInventory: React.FC = () => {
-  const { wines, sites, updateWine, addMovement } = useFirebase();
+  const { wines, sites, updateWine, addMovement, recordStockOperations } = useFirebase();
 
   // Helper to prevent iOS WebKit hit-testing desync when virtual keyboard is dismissed
   const handleInputBlur = () => {
@@ -72,6 +72,7 @@ export const MobileInventory: React.FC = () => {
   const [selectedBin, setSelectedBin] = useState<string>('');
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditSuccess, setAuditSuccess] = useState<string | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
   // Quick Location modal on individual cards
   const [quickLocationWine, setQuickLocationWine] = useState<Wine | null>(null);
@@ -217,67 +218,87 @@ export const MobileInventory: React.FC = () => {
   };
 
   const saveInventoryAudit = async () => {
-    if (!countingWine) return;
+    if (!countingWine || isAuditing) return;
     setIsAuditing(true);
+    setAuditError(null);
     const difference = tempQty - countingWine.quantity;
     const siteChanged = selectedSiteId !== countingWine.siteId;
 
     try {
       const nowStr = new Date().toLocaleDateString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      await updateWine(countingWine.id, {
-        quantity: tempQty,
-        siteId: selectedSiteId,
-        bin: selectedBin.trim(),
-        notes: countingWine.notes 
-          ? countingWine.notes.includes('Dernier inventaire:') 
-            ? countingWine.notes.replace(/Dernier inventaire: [^]*/, `Dernier inventaire: le ${nowStr} (${tempQty} bt)`)
-            : `${countingWine.notes}\n\nDernier inventaire: le ${nowStr} (${tempQty} bt)`
-          : `Dernier inventaire: le ${nowStr} (${tempQty} bt)`
-      }, 'stock');
+      const updatedNotes = countingWine.notes 
+        ? countingWine.notes.includes('Dernier inventaire:') 
+          ? countingWine.notes.replace(/Dernier inventaire: [^]*/, `Dernier inventaire: le ${nowStr} (${tempQty} bt)`)
+          : `${countingWine.notes}\n\nDernier inventaire: le ${nowStr} (${tempQty} bt)`
+        : `Dernier inventaire: le ${nowStr} (${tempQty} bt)`;
+
+      const ops: StockOperation[] = [
+        {
+          wineId: countingWine.id,
+          wineUpdates: {
+            quantity: tempQty,
+            siteId: selectedSiteId,
+            bin: selectedBin.trim(),
+            notes: updatedNotes
+          }
+        }
+      ];
 
       if (siteChanged) {
         const oldSiteName = sites.find(s => s.id === countingWine.siteId)?.name || 'Ancien site';
         const newSiteName = sites.find(s => s.id === selectedSiteId)?.name || 'Nouveau site';
-        await addMovement({
+        ops.push({
           wineId: countingWine.id,
-          wineName: `${countingWine.name} (${countingWine.vintage})`,
-          type: 'transfer',
-          quantity: tempQty,
-          reason: 'transfert',
-          fromSiteId: countingWine.siteId,
-          toSiteId: selectedSiteId,
-          notes: `Transfert de site lors du check-up mobile (${oldSiteName} -> ${newSiteName}). Nouveau rang: ${selectedBin.trim()}`
+          movement: {
+            wineId: countingWine.id,
+            wineName: `${countingWine.name} (${countingWine.vintage})`,
+            type: 'transfer',
+            quantity: tempQty,
+            reason: 'transfert',
+            fromSiteId: countingWine.siteId,
+            toSiteId: selectedSiteId,
+            notes: `Transfert de site lors du check-up mobile (${oldSiteName} -> ${newSiteName}). Nouveau rang: ${selectedBin.trim()}`
+          }
         });
       }
 
       if (difference !== 0) {
-        await addMovement({
+        ops.push({
           wineId: countingWine.id,
-          wineName: `${countingWine.name} (${countingWine.vintage})`,
-          type: 'correction',
-          quantity: Math.abs(difference),
-          reason: 'correction',
-          notes: `Ajustement d'inventaire sur iPhone par l'employé (${difference > 0 ? 'Surplus' : 'Déficit'} de ${Math.abs(difference)} bt).`,
-          fromSiteId: difference < 0 ? selectedSiteId : undefined,
-          toSiteId: difference > 0 ? selectedSiteId : undefined
+          movement: {
+            wineId: countingWine.id,
+            wineName: `${countingWine.name} (${countingWine.vintage})`,
+            type: 'correction',
+            quantity: Math.abs(difference),
+            reason: 'correction',
+            notes: `Ajustement d'inventaire sur iPhone par l'employé (${difference > 0 ? 'Surplus' : 'Déficit'} de ${Math.abs(difference)} bt).`,
+            fromSiteId: difference < 0 ? selectedSiteId : undefined,
+            toSiteId: difference > 0 ? selectedSiteId : undefined
+          }
         });
       } else if (!siteChanged) {
-        await addMovement({
+        ops.push({
           wineId: countingWine.id,
-          wineName: `${countingWine.name} (${countingWine.vintage})`,
-          type: 'correction',
-          quantity: 0,
-          reason: 'correction',
-          notes: `Vérification d'inventaire sur iPhone. Stock exact (${tempQty} bt). Site: ${sites.find(s => s.id === selectedSiteId)?.name?.split(' - ')[0]}, Rang: ${selectedBin.trim()}`,
-          toSiteId: selectedSiteId
+          movement: {
+            wineId: countingWine.id,
+            wineName: `${countingWine.name} (${countingWine.vintage})`,
+            type: 'correction',
+            quantity: 0,
+            reason: 'correction',
+            notes: `Vérification d'inventaire sur iPhone. Stock exact (${tempQty} bt). Site: ${sites.find(s => s.id === selectedSiteId)?.name?.split(' - ')[0]}, Rang: ${selectedBin.trim()}`,
+            toSiteId: selectedSiteId
+          }
         });
       }
+
+      await recordStockOperations(ops);
 
       setAuditSuccess(`Inventaire & Emplacement validés pour "${countingWine.name}" !`);
       setCountingWine(null);
       setTimeout(() => setAuditSuccess(null), 3500);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setAuditError(e?.message || "Erreur lors de l'enregistrement de l'inventaire. Veuillez réessayer.");
     } finally {
       setIsAuditing(false);
     }
@@ -637,6 +658,22 @@ export const MobileInventory: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {auditError && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 shadow-sm animate-fade-in">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4.5 h-4.5 text-rose-600 shrink-0" />
+                <span>{auditError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuditError(null)}
+                className="p-1 text-rose-500 hover:text-rose-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {auditSuccess && (
             <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm animate-fade-in">

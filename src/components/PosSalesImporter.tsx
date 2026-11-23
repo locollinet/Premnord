@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { useFirebase } from '../context/FirebaseContext';
+import { useFirebase, StockOperation } from '../context/FirebaseContext';
 import { Wine, WineColor, Site, getCanonicalDomain, normalizeWineString, isSameWineReference } from '../types';
 import { findBestWineMatchInCatalog } from '../lib/wineMatching';
 import { matchesWineSearch, removeAccents, normalizeSearchTokens, getWineSearchRelevanceScore } from '../lib/stringUtils';
@@ -59,7 +59,7 @@ interface PosSalesImporterProps {
 }
 
 export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onSuccess }) => {
-  const { wines, sites, updateWine, addMovement, user } = useFirebase();
+  const { wines, sites, recordStockOperations, user } = useFirebase();
 
   // Mode: 'pdf' | 'excel' | 'text'
   const [importMode, setImportMode] = useState<'pdf' | 'excel' | 'text'>('pdf');
@@ -149,6 +149,26 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
     });
   };
 
+  const fetchReceiptApi = async (payload: Record<string, any>): Promise<Response> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 65000);
+    try {
+      return await fetch('/api/gemini/parse-sales-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw new Error("L'analyse IA a pris trop de temps (délai dépassé). Veuillez réessayer ou utiliser un fichier plus léger.");
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     setErrorMessage(null);
@@ -170,23 +190,19 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
         const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
         setAnalysisProgress('Analyse des colonnes et envoi à l\'IA pour structuration...');
-        const response = await fetch('/api/gemini/parse-sales-receipt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rawRows: jsonRows.slice(0, 150),
-            existingCatalog: wines.map(w => ({ id: w.id, name: w.name, domain: w.domain, vintage: w.vintage, color: w.color, format: w.format }))
-          })
+        const response = await fetchReceiptApi({
+          rawRows: jsonRows.slice(0, 150),
+          existingCatalog: wines.map(w => ({ id: w.id, name: w.name, domain: w.domain, vintage: w.vintage, color: w.color, format: w.format }))
         });
 
         if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Erreur lors de l\'interprétation des lignes Excel.');
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || `Erreur serveur (${response.status}) lors de l'interprétation des lignes Excel.`);
         }
         extractedData = await response.json();
       }
 
-      // 2. PDF PARSING VIA GEMINI 3.5 FLASH (Native PDF support)
+      // 2. PDF PARSING VIA GEMINI FLASH (Native PDF support)
       else if (importMode === 'pdf') {
         if (!selectedFile) {
           throw new Error('Veuillez sélectionner un fichier PDF de ticket de caisse ou export PMS.');
@@ -195,13 +211,9 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
         const base64Pdf = await readFileAsBase64(selectedFile);
 
         setAnalysisProgress('Lecture visuelle du ticket et rapprochement avec la cave par Gemini...');
-        const response = await fetch('/api/gemini/parse-sales-receipt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pdfBase64: base64Pdf,
-            existingCatalog: wines.map(w => ({ id: w.id, name: w.name, domain: w.domain, vintage: w.vintage, color: w.color, format: w.format }))
-          })
+        const response = await fetchReceiptApi({
+          pdfBase64: base64Pdf,
+          existingCatalog: wines.map(w => ({ id: w.id, name: w.name, domain: w.domain, vintage: w.vintage, color: w.color, format: w.format }))
         });
 
         if (!response.ok) {
@@ -216,7 +228,7 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
               }))
             };
           } else {
-            throw new Error(err.error || 'Erreur lors de l\'interprétation du PDF de caisse.');
+            throw new Error(err.error || `Erreur serveur (${response.status}) lors de l'interprétation du PDF de caisse.`);
           }
         } else {
           const data = await response.json();
@@ -241,18 +253,14 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
           throw new Error('Veuillez coller le texte brut du ticket de caisse.');
         }
         setAnalysisProgress('Analyse du texte brut par l\'IA...');
-        const response = await fetch('/api/gemini/parse-sales-receipt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rawText: rawText.trim(),
-            existingCatalog: wines.map(w => ({ id: w.id, name: w.name, domain: w.domain, vintage: w.vintage, color: w.color, format: w.format }))
-          })
+        const response = await fetchReceiptApi({
+          rawText: rawText.trim(),
+          existingCatalog: wines.map(w => ({ id: w.id, name: w.name, domain: w.domain, vintage: w.vintage, color: w.color, format: w.format }))
         });
 
         if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Erreur lors de l\'analyse du texte de caisse.');
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || `Erreur serveur (${response.status}) lors de l'analyse du texte de caisse.`);
         }
         extractedData = await response.json();
       }
@@ -459,6 +467,9 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
       const runningStockMap = new Map<string, number>();
       wines.forEach(w => runningStockMap.set(w.id, w.quantity));
 
+      const operations: StockOperation[] = [];
+      const receiptTs = new Date(`${receiptDate}T12:00:00`).getTime() || Date.now();
+
       for (const item of itemsToDeduct) {
         const wine = wines.find(w => w.id === item.selectedWineId);
         if (!wine) continue;
@@ -466,28 +477,31 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
         const currentQty = runningStockMap.get(wine.id) ?? wine.quantity;
         const newQty = Math.max(0, currentQty - item.quantity);
         runningStockMap.set(wine.id, newQty);
-        
-        // 1. Update wine quantity in Firestore with action 'stock'
-        await updateWine(wine.id, {
-          quantity: newQty,
-          updatedAt: Date.now()
-        }, 'stock');
 
-        // 2. Record stock movement with the exact site from which the bottle was decremented
-        await addMovement({
+        operations.push({
           wineId: wine.id,
-          wineName: `${wine.domain} - ${wine.name} (${wine.vintage || 'S.A.'})`,
-          type: 'out',
-          quantity: item.quantity,
-          fromSiteId: wine.siteId,
-          reason: 'vente',
-          notes: `Vente importée ticket PMS ${receiptNumber ? `#${receiptNumber}` : ''} (${item.rawLabel}) du ${receiptDate}`,
-          userId: user?.uid,
-          userName: user?.displayName || user?.email || 'Sommelier',
-          createdAt: new Date(`${receiptDate}T12:00:00`).getTime() || Date.now()
+          wineUpdates: {
+            quantity: newQty
+          },
+          movement: {
+            wineId: wine.id,
+            wineName: `${wine.domain} - ${wine.name} (${wine.vintage || 'S.A.'})`,
+            type: 'out',
+            quantity: item.quantity,
+            fromSiteId: wine.siteId,
+            reason: 'vente',
+            notes: `Vente importée ticket PMS ${receiptNumber ? `#${receiptNumber}` : ''} (${item.rawLabel}) du ${receiptDate}`,
+            userId: user?.uid,
+            userName: user?.displayName || user?.email || 'Sommelier',
+            createdAt: receiptTs
+          }
         });
 
         totalDeductedCount += item.quantity;
+      }
+
+      if (operations.length > 0) {
+        await recordStockOperations(operations);
       }
 
       setSuccessSummary({

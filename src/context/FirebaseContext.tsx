@@ -33,6 +33,16 @@ import { calculateSellingPrice } from '../lib/pricing';
 import { inferWineCountry } from '../lib/wineGrouping';
 import { DEFAULT_WINE_REGIONS, DEFAULT_REGION_GROUPS, generateRegionId } from '../lib/regions';
 
+export interface StockOperation {
+  wineId: string;
+  wineUpdates?: Partial<Wine>;
+  movement?: Omit<Movement, 'id' | 'userId' | 'userName' | 'createdAt'> & {
+    createdAt?: number;
+    userId?: string;
+    userName?: string;
+  };
+}
+
 interface FirebaseContextType {
   user: UserProfile | null;
   loading: boolean;
@@ -47,7 +57,7 @@ interface FirebaseContextType {
   
   // Data actions
   addWine: (wine: Omit<Wine, 'id' | 'createdAt' | 'updatedAt'>, options?: { importMode?: 'accumulate' | 'replace' }) => Promise<string>;
-  updateWine: (id: string, updates: Partial<Wine>, action: 'edit' | 'stock', options?: { propagateReference?: boolean }) => Promise<void>;
+  updateWine: (id: string, updates: Partial<Wine>, action?: 'edit' | 'stock', options?: { propagateReference?: boolean }) => Promise<void>;
   deleteWine: (id: string) => Promise<void>;
   deleteWinesBatch: (ids: string[]) => Promise<number>;
   
@@ -66,6 +76,7 @@ interface FirebaseContextType {
   resetRegionsToDefault: () => Promise<void>;
 
   addMovement: (movement: Omit<Movement, 'id' | 'userId' | 'userName' | 'createdAt'> & { createdAt?: number; userId?: string; userName?: string }) => Promise<string>;
+  recordStockOperations: (operations: StockOperation[]) => Promise<{ synced: boolean; movementIds: string[] }>;
   undoneMovements: Movement[];
   undoMovements: (movementIds: string[]) => Promise<number>;
   redoMovements: (movementIds: string[]) => Promise<number>;
@@ -119,6 +130,40 @@ function prepareFirestoreUpdate(obj: Record<string, any>): Record<string, any> {
     }
   });
   return result;
+}
+
+// Guard Firestore writes against indefinite stalls when persistentLocalCache is enabled
+// (e.g. weak Wi-Fi in cellar, Safari wake-from-sleep, or multi-tab IndexedDB lock handoff).
+// Real Firestore errors (permission-denied, not-found, etc.) still reject immediately.
+async function commitFirestoreWrite(
+  writePromise: Promise<void>,
+  timeoutMs = 5000
+): Promise<'synced' | 'queued'> {
+  const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  const effectiveTimeout = isOffline ? Math.min(timeoutMs, 1000) : timeoutMs;
+
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<'queued'>((resolve) => {
+    timerId = setTimeout(() => resolve('queued'), effectiveTimeout);
+  });
+
+  const guardedWrite = writePromise.then(
+    () => 'synced' as const,
+    (err) => {
+      throw err;
+    }
+  );
+
+  // Prevent unhandled rejection if the write fails after the timeout resolved as 'queued'
+  guardedWrite.catch((lateErr) => {
+    console.warn('Firestore background write warning after offline grace timeout:', lateErr);
+  });
+
+  try {
+    return await Promise.race([guardedWrite, timeoutPromise]);
+  } finally {
+    if (timerId !== undefined) clearTimeout(timerId);
+  }
 }
 
 // Initial/default sites to bootstrap the system
@@ -842,7 +887,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const path = `wines/${id}`;
     try {
       const db = getFirebaseDb();
-      await setDoc(doc(db, 'wines', id), cleanUndefined(newWine));
+      await commitFirestoreWrite(setDoc(doc(db, 'wines', id), cleanUndefined(newWine)));
       return id;
     } catch (err) {
       // Revert local state in case of failure
@@ -856,7 +901,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateWine = async (
     id: string, 
     updates: Partial<Wine>, 
-    action: 'edit' | 'stock',
+    action: 'edit' | 'stock' = 'edit',
     options?: { propagateReference?: boolean }
   ): Promise<void> => {
     const shouldPropagate = options?.propagateReference !== false && action === 'edit';
@@ -960,7 +1005,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         });
       }
 
-      await batch.commit();
+      await commitFirestoreWrite(batch.commit());
     } catch (err) {
       // Revert local state on failure
       winesStateRef.current = previousWines;
@@ -1125,7 +1170,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // --- MOVEMENT MUTATIONS ---
   const addMovement = async (movementInput: Omit<Movement, 'id' | 'userId' | 'userName' | 'createdAt'> & { createdAt?: number; userId?: string; userName?: string }): Promise<string> => {
-    const id = `mov_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    const id = `mov_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const now = Date.now();
     const currentUser = userRef.current;
     
@@ -1144,19 +1189,165 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createdAt: movementInput.createdAt || now
     };
 
-    if (isDemo) {
-      const updatedMovements = [newMovement, ...movementsStateRef.current];
+    const previousMovements = [...movementsStateRef.current];
+    const updatedMovements = [newMovement, ...movementsStateRef.current];
+
+    if (isDemo || !currentUser) {
       saveLocalData(undefined, undefined, updatedMovements);
       return id;
     }
 
+    // Optimistic local state update for instant UI responsiveness
+    movementsStateRef.current = updatedMovements;
+    setMovements(updatedMovements);
+
     const path = `movements/${id}`;
     try {
       const db = getFirebaseDb();
-      await setDoc(doc(db, 'movements', id), cleanUndefined(newMovement));
+      await commitFirestoreWrite(setDoc(doc(db, 'movements', id), cleanUndefined(newMovement)));
       return id;
     } catch (err) {
+      movementsStateRef.current = previousMovements;
+      setMovements(previousMovements);
       handleFirestoreError(err, OperationType.CREATE, path);
+      throw err;
+    }
+  };
+
+  /**
+   * Executes one or more stock updates + movement log creations atomically in chunked Firestore writeBatches.
+   * Prevents partial updates, cuts onSnapshot re-renders in half, and uses offline-grace timeouts so
+   * UI spinners can never hang forever on weak Wi-Fi or Safari wake-from-sleep.
+   */
+  const recordStockOperations = async (
+    operations: StockOperation[]
+  ): Promise<{ synced: boolean; movementIds: string[] }> => {
+    if (!operations || operations.length === 0) {
+      return { synced: true, movementIds: [] };
+    }
+
+    const currentUser = userRef.current;
+    if (!currentUser && !isDemoRef.current) {
+      throw new Error("L'utilisateur doit être connecté pour enregistrer un mouvement de stock.");
+    }
+
+    const now = Date.now();
+    const previousWines = [...winesStateRef.current];
+    const previousMovements = [...movementsStateRef.current];
+
+    // Accumulate wine updates per wineId (last write wins for same field if a wine appears multiple times)
+    const wineUpdatesMap = new Map<string, Partial<Wine>>();
+    const createdMovements: Movement[] = [];
+
+    operations.forEach((op, idx) => {
+      if (op.wineUpdates && Object.keys(op.wineUpdates).length > 0) {
+        const merged = { ...(wineUpdatesMap.get(op.wineId) || {}), ...op.wineUpdates };
+        if (merged.domain) {
+          merged.domain = getCanonicalDomain(merged.domain);
+        }
+        wineUpdatesMap.set(op.wineId, merged);
+      }
+
+      if (op.movement) {
+        const movId = `mov_${now}_${idx}_${Math.random().toString(36).slice(2, 7)}`;
+        const relatedWine = winesStateRef.current.find(w => w.id === op.movement!.wineId);
+        const newMovement: Movement = {
+          ...op.movement,
+          domain: op.movement.domain || relatedWine?.domain,
+          vintage: op.movement.vintage || relatedWine?.vintage,
+          id: movId,
+          userId: op.movement.userId || currentUser?.uid || 'user_guest',
+          userName: op.movement.userName || currentUser?.displayName || currentUser?.email || 'Sommelier',
+          createdAt: op.movement.createdAt || (now + idx)
+        };
+        createdMovements.push(newMovement);
+      }
+    });
+
+    // Apply optimistic local state updates in a single pass
+    const nextWines = wineUpdatesMap.size > 0
+      ? winesStateRef.current.map(w => {
+          const upd = wineUpdatesMap.get(w.id);
+          if (!upd) return w;
+          const updated = { ...w, ...upd, updatedAt: now };
+          Object.keys(upd).forEach(k => {
+            if ((upd as any)[k] === undefined) {
+              delete (updated as any)[k];
+            }
+          });
+          return updated;
+        })
+      : winesStateRef.current;
+
+    const nextMovements = createdMovements.length > 0
+      ? [...createdMovements.slice().reverse(), ...movementsStateRef.current]
+      : movementsStateRef.current;
+
+    winesStateRef.current = nextWines;
+    setWines(nextWines);
+    movementsStateRef.current = nextMovements;
+    setMovements(nextMovements);
+
+    const movementIds = createdMovements.map(m => m.id);
+
+    if (isDemo || !currentUser) {
+      saveLocalData(
+        wineUpdatesMap.size > 0 ? nextWines : undefined,
+        undefined,
+        createdMovements.length > 0 ? nextMovements : undefined
+      );
+      return { synced: true, movementIds };
+    }
+
+    try {
+      const db = getFirebaseDb();
+      // Build flat list of batch tasks and commit in safe chunks of 400 writes (Firestore limit is 500)
+      const tasks: Array<
+        | { kind: 'updateWine'; id: string; data: Record<string, any> }
+        | { kind: 'setMovement'; id: string; data: Movement }
+      > = [];
+
+      wineUpdatesMap.forEach((upd, wineId) => {
+        if (previousWines.some(w => w.id === wineId)) {
+          tasks.push({
+            kind: 'updateWine',
+            id: wineId,
+            data: prepareFirestoreUpdate({ ...upd, updatedAt: now })
+          });
+        }
+      });
+
+      createdMovements.forEach((mov) => {
+        tasks.push({
+          kind: 'setMovement',
+          id: mov.id,
+          data: cleanUndefined(mov)
+        });
+      });
+
+      let allSynced = true;
+      for (let i = 0; i < tasks.length; i += 400) {
+        const chunk = tasks.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach(task => {
+          if (task.kind === 'updateWine') {
+            batch.update(doc(db, 'wines', task.id), task.data);
+          } else {
+            batch.set(doc(db, 'movements', task.id), task.data);
+          }
+        });
+        const status = await commitFirestoreWrite(batch.commit());
+        if (status !== 'synced') allSynced = false;
+      }
+
+      return { synced: allSynced, movementIds };
+    } catch (err) {
+      // Revert optimistic state on real Firestore error
+      winesStateRef.current = previousWines;
+      setWines(previousWines);
+      movementsStateRef.current = previousMovements;
+      setMovements(previousMovements);
+      handleFirestoreError(err, OperationType.WRITE, 'wines+movements');
       throw err;
     }
   };
@@ -1255,6 +1446,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const remainingMovements = movementsStateRef.current.filter(m => !idSet.has(m.id));
 
+    const previousWines = [...winesStateRef.current];
+    const previousMovements = [...movementsStateRef.current];
+    const previousUndone = [...undoneMovementsRef.current];
+
     // Optimistic local state update
     winesStateRef.current = updatedWines;
     setWines(updatedWines);
@@ -1269,24 +1464,45 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       const db = getFirebaseDb();
-      const batch = writeBatch(db);
+      const tasks: Array<
+        | { kind: 'updateWine'; id: string; quantity: number }
+        | { kind: 'deleteMovement'; id: string }
+      > = [];
+
       stockDeltas.forEach((delta, wineId) => {
         if (delta === 0) return;
         const updatedWine = updatedWines.find(w => w.id === wineId);
         if (updatedWine) {
-          batch.update(doc(db, 'wines', wineId), {
-            quantity: updatedWine.quantity,
-            updatedAt: now
-          });
+          tasks.push({ kind: 'updateWine', id: wineId, quantity: updatedWine.quantity });
         }
       });
       toUndo.forEach(mov => {
-        batch.delete(doc(db, 'movements', mov.id));
+        tasks.push({ kind: 'deleteMovement', id: mov.id });
       });
-      await batch.commit();
+
+      for (let i = 0; i < tasks.length; i += 400) {
+        const chunk = tasks.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach(task => {
+          if (task.kind === 'updateWine') {
+            batch.update(doc(db, 'wines', task.id), {
+              quantity: task.quantity,
+              updatedAt: now
+            });
+          } else {
+            batch.delete(doc(db, 'movements', task.id));
+          }
+        });
+        await commitFirestoreWrite(batch.commit());
+      }
       return toUndo.length;
     } catch (err) {
       console.error('Error undoing movements:', err);
+      winesStateRef.current = previousWines;
+      setWines(previousWines);
+      movementsStateRef.current = previousMovements;
+      setMovements(previousMovements);
+      persistUndoneMovements(previousUndone);
       throw err;
     }
   };
@@ -1348,6 +1564,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const restoredMovements = [...toRedo, ...movementsStateRef.current].sort((a, b) => b.createdAt - a.createdAt);
     const remainingUndone = undoneMovementsRef.current.filter(m => !idSet.has(m.id));
 
+    const previousWines = [...winesStateRef.current];
+    const previousMovements = [...movementsStateRef.current];
+    const previousUndone = [...undoneMovementsRef.current];
+
     winesStateRef.current = updatedWines;
     setWines(updatedWines);
     movementsStateRef.current = restoredMovements;
@@ -1361,24 +1581,45 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       const db = getFirebaseDb();
-      const batch = writeBatch(db);
+      const tasks: Array<
+        | { kind: 'updateWine'; id: string; quantity: number }
+        | { kind: 'setMovement'; id: string; mov: Movement }
+      > = [];
+
       stockDeltas.forEach((delta, wineId) => {
         if (delta === 0) return;
         const updatedWine = updatedWines.find(w => w.id === wineId);
         if (updatedWine) {
-          batch.update(doc(db, 'wines', wineId), {
-            quantity: updatedWine.quantity,
-            updatedAt: now
-          });
+          tasks.push({ kind: 'updateWine', id: wineId, quantity: updatedWine.quantity });
         }
       });
       toRedo.forEach(mov => {
-        batch.set(doc(db, 'movements', mov.id), cleanUndefined(mov));
+        tasks.push({ kind: 'setMovement', id: mov.id, mov });
       });
-      await batch.commit();
+
+      for (let i = 0; i < tasks.length; i += 400) {
+        const chunk = tasks.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach(task => {
+          if (task.kind === 'updateWine') {
+            batch.update(doc(db, 'wines', task.id), {
+              quantity: task.quantity,
+              updatedAt: now
+            });
+          } else {
+            batch.set(doc(db, 'movements', task.id), cleanUndefined(task.mov));
+          }
+        });
+        await commitFirestoreWrite(batch.commit());
+      }
       return toRedo.length;
     } catch (err) {
       console.error('Error redoing movements:', err);
+      winesStateRef.current = previousWines;
+      setWines(previousWines);
+      movementsStateRef.current = previousMovements;
+      setMovements(previousMovements);
+      persistUndoneMovements(previousUndone);
       throw err;
     }
   };
@@ -2294,6 +2535,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       reorderRegions,
       resetRegionsToDefault,
       addMovement,
+      recordStockOperations,
       undoneMovements,
       undoMovements,
       redoMovements,
