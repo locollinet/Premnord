@@ -56,7 +56,7 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
     }
   }, [preselectedWine, wines, selectedWineId]);
 
-  // Adjust defaults based on movement type
+  // Adjust default reason only when movement type changes
   useEffect(() => {
     if (type === 'in') {
       setReason('livraison');
@@ -64,16 +64,24 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
       setReason('vente');
     } else if (type === 'transfer') {
       setReason('transfert');
-      if (wine) {
-        setFromSiteId(wine.siteId);
-        // Default target is any site other than the wine's current site
-        const otherSite = sites.find(s => s.id !== wine.siteId);
-        if (otherSite) setToSiteId(otherSite.id);
-      }
     } else if (type === 'correction') {
       setReason('correction');
     }
-  }, [type, wine, sites]);
+  }, [type]);
+
+  // Adjust transfer source/target sites when switching to transfer or changing wine
+  const activeWineId = wine?.id;
+  const activeWineSiteId = wine?.siteId;
+  useEffect(() => {
+    if (type === 'transfer' && activeWineSiteId) {
+      setFromSiteId(activeWineSiteId);
+      setToSiteId(prev => {
+        if (prev && prev !== activeWineSiteId) return prev;
+        const otherSite = sites.find(s => s.id !== activeWineSiteId);
+        return otherSite ? otherSite.id : '';
+      });
+    }
+  }, [type, activeWineId, activeWineSiteId, sites]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,9 +297,9 @@ export const MovementFormModal: React.FC<MovementFormModalProps> = ({ preselecte
             </label>
             {preselectedWine ? (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                <p className="text-sm font-bold text-slate-900 truncate">{preselectedWine.name}</p>
+                <p className="text-sm font-bold text-slate-900 truncate">{(wine || preselectedWine).name}</p>
                 <p className="text-xs text-slate-500 truncate font-mono">
-                  {preselectedWine.domain} &bull; Emplacement: {preselectedWine.bin ? preselectedWine.bin : 'N/C'} &bull; Stock : <span className="font-bold text-slate-800">{preselectedWine.quantity} bt</span>
+                  {(wine || preselectedWine).domain} &bull; Emplacement: {(wine || preselectedWine).bin ? (wine || preselectedWine).bin : 'N/C'} &bull; Stock : <span className="font-bold text-slate-800">{(wine || preselectedWine).quantity} bt</span>
                 </p>
               </div>
             ) : (

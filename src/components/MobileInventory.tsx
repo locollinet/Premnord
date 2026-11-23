@@ -165,6 +165,7 @@ export const MobileInventory: React.FC = () => {
     setSelectedSiteId(targetSiteId);
     setSelectedBin(wine.siteId === targetSiteId ? (wine.bin || '') : '');
     setAuditSuccess(null);
+    setAuditError(null);
   };
 
   const openQuickLocationModal = (wine: Wine, e: React.MouseEvent) => {
@@ -206,8 +207,9 @@ export const MobileInventory: React.FC = () => {
       setAuditSuccess(`Emplacement mis à jour pour "${quickLocationWine.name}" : ${updatedSiteName} / Rang ${quickModalBin.trim() || 'N/C'}`);
       setQuickLocationWine(null);
       setTimeout(() => setAuditSuccess(null), 3500);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erreur lors de la mise à jour rapide de l'emplacement", err);
+      setAuditError(err?.message || "Erreur lors de la mise à jour de l'emplacement.");
     } finally {
       setIsSavingQuickLoc(false);
     }
@@ -291,11 +293,15 @@ export const MobileInventory: React.FC = () => {
         });
       }
 
-      await recordStockOperations(ops);
+      const { synced } = await recordStockOperations(ops);
 
-      setAuditSuccess(`Inventaire & Emplacement validés pour "${countingWine.name}" !`);
+      setAuditSuccess(
+        synced
+          ? `Inventaire & Emplacement validés pour "${countingWine.name}" !`
+          : `Inventaire enregistré hors-ligne pour "${countingWine.name}" (synchro auto dès retour réseau).`
+      );
       setCountingWine(null);
-      setTimeout(() => setAuditSuccess(null), 3500);
+      setTimeout(() => setAuditSuccess(null), 4500);
     } catch (e: any) {
       console.error(e);
       setAuditError(e?.message || "Erreur lors de l'enregistrement de l'inventaire. Veuillez réessayer.");
@@ -449,6 +455,22 @@ export const MobileInventory: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {auditError && (
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{auditError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAuditError(null)}
+              className="p-1 text-rose-500 hover:text-rose-800 cursor-pointer shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Big Touch Validation Button (at least 48px height) */}
         <button

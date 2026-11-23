@@ -87,13 +87,11 @@ function cleanAndParseJson<T = any>(rawText: string): T {
   }
 }
 
-// Battle-tested Gemini model sequence in order of stability, latency & quota limits
+// Active Gemini Flash model sequence in order of stability, latency & quota limits
 const DEFAULT_GEMINI_MODELS = [
   "gemini-2.5-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
-  "gemini-2.0-flash"
+  "gemini-4-hydrogen",
+  "gemini-3.1-flash-lite"
 ];
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -288,7 +286,7 @@ Fournis une réponse au format JSON strict.`;
           lastError = modelErr;
           console.warn(`[API/gemini/parse-sales-receipt] Model ${modelName} failed:`, modelErr.message || modelErr);
           const remainingAfter = routeDeadline - Date.now();
-          if (remainingAfter >= 5000 && contentsPayloadTextOnly.length > 0 && contentsPayloadWithPdf !== contentsPayloadTextOnly) {
+          if (remainingAfter >= 5000 && Boolean(cleanBase64 && extractedPdfText) && contentsPayloadTextOnly.length > 0) {
             try {
               console.log(`[API/gemini/parse-sales-receipt] Retrying with text-only payload on ${modelName}...`);
               const textResp = await withTimeout(
@@ -516,7 +514,7 @@ Extrais rigoureusement :
             console.warn(`[API/gemini/parse-purchase-invoice] Model ${modelName} attempt ${attempt + 1} failed:`, errMsg);
 
             // If text is available and PDF failed, try text only immediately
-            if (contentsPayloadTextOnly.length > 0 && contentsPayloadWithPdf !== contentsPayloadTextOnly) {
+            if (Boolean(cleanBase64 && extractedPdfText) && contentsPayloadTextOnly.length > 0) {
               try {
                 console.log(`[API/gemini/parse-purchase-invoice] Retrying with text-only payload on ${modelName}...`);
                 const textResp = await ai.models.generateContent({

@@ -66,7 +66,7 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successSummary, setSuccessSummary] = useState<{ totalQty: number; linesCount: number; timestamp: number } | null>(null);
+  const [successSummary, setSuccessSummary] = useState<{ totalQty: number; linesCount: number; timestamp: number; synced?: boolean } | null>(null);
 
   // File uploads
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -500,14 +500,17 @@ export const PosSalesImporter: React.FC<PosSalesImporterProps> = ({ onClose, onS
         totalDeductedCount += item.quantity;
       }
 
+      let synced = true;
       if (operations.length > 0) {
-        await recordStockOperations(operations);
+        const res = await recordStockOperations(operations);
+        synced = res.synced;
       }
 
       setSuccessSummary({
         totalQty: totalDeductedCount,
         linesCount: itemsToDeduct.length,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        synced
       });
       setStep('confirmed');
 
@@ -1142,6 +1145,11 @@ TABLE 14 - SERVICE SOIR
             <p className="text-xs text-stone-600 leading-relaxed font-sans">
               <strong>{successSummary.totalQty} bouteilles</strong> ont été déduites de la cave sur <strong>{successSummary.linesCount} références</strong>. Les mouvements de stocks et l'historique des ventes sont à jour.
             </p>
+            {successSummary.synced === false && (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 font-medium">
+                Connexion faible détectée : les sorties ont été enregistrées localement et se synchroniseront automatiquement avec le cloud dès le retour du réseau.
+              </p>
+            )}
           </div>
 
           <div className="pt-4 flex justify-center gap-3">

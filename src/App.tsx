@@ -43,7 +43,7 @@ interface AlertNotification {
 }
 
 function AppContent() {
-  const { user, loading, isDemo, logout, syncLocalToFirebase, sites, undoneMovements } = useFirebase();
+  const { user, loading, isDemo, logout, syncLocalToFirebase, sites, undoneMovements, offlineNotice, clearOfflineNotice } = useFirebase();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [syncing, setSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
@@ -219,6 +219,25 @@ function AppContent() {
       {syncError && (
         <div className="bg-red-50 border-b border-red-100 py-3 px-4 text-center text-xs font-bold text-red-800 animate-fade-in">
           ❌ {syncError}
+        </div>
+      )}
+
+      {offlineNotice && (
+        <div className="bg-amber-50 border-b border-amber-200 py-2.5 px-4 text-xs font-semibold text-amber-900 animate-fade-in">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{offlineNotice}</span>
+            </div>
+            <button
+              type="button"
+              onClick={clearOfflineNotice}
+              className="p-1 rounded-lg hover:bg-amber-100 text-amber-700 cursor-pointer shrink-0"
+              title="Fermer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 

@@ -48,6 +48,8 @@ interface FirebaseContextType {
   loading: boolean;
   isDemo: boolean;
   error: string | null;
+  offlineNotice: string | null;
+  clearOfflineNotice: () => void;
   wines: Wine[];
   sites: Site[];
   movements: Movement[];
@@ -282,6 +284,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
+  const clearOfflineNotice = () => setOfflineNotice(null);
+
+  const reportWriteStatus = (status: 'synced' | 'queued') => {
+    if (status === 'queued') {
+      setOfflineNotice("Réseau faible ou hors-ligne : mouvement enregistré localement, synchronisation automatique dès retour de la connexion.");
+    } else {
+      setOfflineNotice(prev => (prev ? null : prev));
+    }
+  };
   
   const [wines, setWines] = useState<Wine[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -887,7 +899,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const path = `wines/${id}`;
     try {
       const db = getFirebaseDb();
-      await commitFirestoreWrite(setDoc(doc(db, 'wines', id), cleanUndefined(newWine)));
+      reportWriteStatus(await commitFirestoreWrite(setDoc(doc(db, 'wines', id), cleanUndefined(newWine))));
       return id;
     } catch (err) {
       // Revert local state in case of failure
@@ -1005,7 +1017,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         });
       }
 
-      await commitFirestoreWrite(batch.commit());
+      reportWriteStatus(await commitFirestoreWrite(batch.commit()));
     } catch (err) {
       // Revert local state on failure
       winesStateRef.current = previousWines;
@@ -1204,7 +1216,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const path = `movements/${id}`;
     try {
       const db = getFirebaseDb();
-      await commitFirestoreWrite(setDoc(doc(db, 'movements', id), cleanUndefined(newMovement)));
+      reportWriteStatus(await commitFirestoreWrite(setDoc(doc(db, 'movements', id), cleanUndefined(newMovement))));
       return id;
     } catch (err) {
       movementsStateRef.current = previousMovements;
@@ -1340,6 +1352,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (status !== 'synced') allSynced = false;
       }
 
+      reportWriteStatus(allSynced ? 'synced' : 'queued');
       return { synced: allSynced, movementIds };
     } catch (err) {
       // Revert optimistic state on real Firestore error
@@ -1493,7 +1506,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             batch.delete(doc(db, 'movements', task.id));
           }
         });
-        await commitFirestoreWrite(batch.commit());
+        reportWriteStatus(await commitFirestoreWrite(batch.commit()));
       }
       return toUndo.length;
     } catch (err) {
@@ -1610,7 +1623,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             batch.set(doc(db, 'movements', task.id), cleanUndefined(task.mov));
           }
         });
-        await commitFirestoreWrite(batch.commit());
+        reportWriteStatus(await commitFirestoreWrite(batch.commit()));
       }
       return toRedo.length;
     } catch (err) {
@@ -2513,6 +2526,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       loading,
       isDemo,
       error,
+      offlineNotice,
+      clearOfflineNotice,
       wines,
       sites,
       movements,
